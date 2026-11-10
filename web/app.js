@@ -209,6 +209,234 @@ function buildControls() {
   }
 }
 
+/**
+ * Reversible spatial controls are separate from the older global sliders.
+ * This keeps existing v0.1 presets and precision input behavior intact.
+ */
+function buildSpatialControls() {
+  const placement = {
+    geometryControls: [
+      "rotation", "perspective_vertical", "perspective_horizontal"
+    ],
+    gradientControls: ["gradient_exposure", "gradient_saturation"]
+  };
+  for (const [container, ids] of Object.entries(placement)) {
+    for (const id of ids) {
+      const specification = SPATIAL_CONTROLS.find((item) => item.id === id);
+      const wrapper = document.createElement("div");
+      wrapper.className = "control-item";
+
+      const heading = document.createElement("div");
+      heading.className = "control-title";
+      const label = document.createElement("label");
+      label.textContent = specification.label;
+      label.htmlFor = "spatial-number-" + id;
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.textContent = "Reset";
+      reset.setAttribute("aria-label", "Reset " + specification.label);
+      reset.addEventListener("click", () => {
+        state.spatial[id] = SPATIAL_DEFAULTS[id];
+        syncSpatialControls();
+        schedulePreview();
+      });
+      heading.append(label, reset);
+
+      const inputs = document.createElement("div");
+      inputs.className = "control-inputs";
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = String(specification.min);
+      slider.max = String(specification.max);
+      slider.step = String(specification.step);
+      slider.value = String(SPATIAL_DEFAULTS[id]);
+      slider.setAttribute("aria-label", specification.label + " slider");
+
+      const number = document.createElement("input");
+      number.id = "spatial-number-" + id;
+      number.type = "number";
+      number.min = String(specification.min);
+      number.max = String(specification.max);
+      number.step = "any";
+      number.value = String(SPATIAL_DEFAULTS[id]);
+
+      slider.addEventListener("input", () => {
+        state.spatial[id] = Number(slider.value);
+        number.value = formatValue(id, state.spatial[id]);
+        number.classList.remove("invalid");
+        schedulePreview();
+      });
+      number.addEventListener("input", () => {
+        const value = Number(number.value);
+        const valid = number.value.trim() !== ""
+          && Number.isFinite(value)
+          && value >= specification.min && value <= specification.max;
+        number.classList.toggle("invalid", !valid);
+        if (!valid) return;
+        state.spatial[id] = value;
+        slider.value = String(value);
+        schedulePreview();
+      });
+      number.addEventListener("blur", () => syncSpatialControls());
+      inputs.append(slider, number);
+      wrapper.append(heading, inputs);
+      $(container).append(wrapper);
+      spatialControls.set(id, { slider, number });
+    }
+  }
+}
+
+function syncSpatialControls() {
+  for (const { id } of SPATIAL_CONTROLS) {
+    const pair = spatialControls.get(id);
+    if (!pair) continue;
+    pair.slider.value = String(state.spatial[id]);
+    pair.number.value = formatValue(id, state.spatial[id]);
+    pair.number.classList.remove("invalid");
+  }
+  $("flipHorizontal").checked = state.spatial.flip_horizontal;
+  $("flipVertical").checked = state.spatial.flip_vertical;
+  $("gradientEnabled").checked = state.spatial.gradient_enabled;
+  $("gradientType").value = state.spatial.gradient_type;
+  $("showGradientHandles").checked = state.showGradientHandles;
+  updateGradientOverlay();
+}
+
+function resetGeometry() {
+  for (const key of [
+    "rotation", "perspective_vertical", "perspective_horizontal",
+    "flip_horizontal", "flip_vertical"
+  ]) {
+    state.spatial[key] = SPATIAL_DEFAULTS[key];
+  }
+  syncSpatialControls();
+  schedulePreview();
+}
+
+function resetGradient() {
+  for (const key of [
+    "gradient_enabled", "gradient_type",
+    "gradient_exposure", "gradient_saturation",
+    "gradient_full_x", "gradient_full_y", "gradient_zero_x",
+    "gradient_zero_y"
+  ]) {
+    state.spatial[key] = SPATIAL_DEFAULTS[key];
+  }
+  syncSpatialControls();
+  schedulePreview();
+}
+
+function updateGradientOverlay() {
+  const canvas = elements.gradientOverlay;
+  const visible = Boolean(state.sourcePreview && state.spatial.gradient_enabled
+    && state.showGradientHandles && !state.selectingPatch);
+  canvas.hidden = !visible;
+  if (!visible) return;
+  const ctx = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
+  ctx.clearRect(0, 0, width, height);
+  const full = [
+    state.spatial.gradient_full_x * width,
+    state.spatial.gradient_full_y * height
+  ];
+  const zero = [
+    state.spatial.gradient_zero_x * width,
+    state.spatial.gradient_zero_y * height
+  ];
+
+  ctx.save();
+  ctx.setLineDash([8, 5]);
+  ctx.strokeStyle = "#f8f9fd";
+  ctx.lineWidth = Math.max(1.3, width / 520);
+  ctx.beginPath();
+  ctx.moveTo(zero[0], zero[1]);
+  ctx.lineTo(full[0], full[1]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (state.spatial.gradient_type === "radial") {
+    const radius = Math.hypot(full[0] - zero[0], full[1] - zero[1]);
+    ctx.beginPath();
+    ctx.arc(full[0], full[1], radius, 0, Math.PI * 2);
+    ctx.strokeStyle = "#f9fafb88";
+    ctx.stroke();
+  } else {
+    const dx = full[0] - zero[0];
+    const dy = full[1] - zero[1];
+    const magnitude = Math.max(1, Math.hypot(dx, dy));
+    const perpendicular = [-dy / magnitude, dx / magnitude];
+    for (const point of [zero, full]) {
+      ctx.beginPath();
+      ctx.moveTo(point[0] - perpendicular[0] * 35,
+        point[1] - perpendicular[1] * 35);
+      ctx.lineTo(point[0] + perpendicular[0] * 35,
+        point[1] + perpendicular[1] * 35);
+      ctx.strokeStyle = "#eafaf3aa";
+      ctx.stroke();
+    }
+  }
+
+  function handle(point, label, filled) {
+    ctx.beginPath();
+    ctx.arc(point[0], point[1], 10, 0, Math.PI * 2);
+    ctx.fillStyle = filled ? "#86eac3" : "#101a26";
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 13px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.shadowColor = "#051018";
+    ctx.shadowBlur = 6;
+    ctx.fillText(label, point[0], point[1] - 18);
+  }
+  handle(full, "Full", true);
+  handle(zero, "Fade", false);
+  ctx.restore();
+}
+
+function installGradientDrag() {
+  const canvas = elements.gradientOverlay;
+  let dragging = null;
+  const getPoint = (event) => {
+    const bounds = canvas.getBoundingClientRect();
+    return [
+      Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
+      Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height))
+    ];
+  };
+  canvas.addEventListener("pointerdown", (event) => {
+    if (canvas.hidden) return;
+    const [x, y] = getPoint(event);
+    const full = Math.hypot(
+      (x - state.spatial.gradient_full_x) * canvas.clientWidth,
+      (y - state.spatial.gradient_full_y) * canvas.clientHeight
+    );
+    const zero = Math.hypot(
+      (x - state.spatial.gradient_zero_x) * canvas.clientWidth,
+      (y - state.spatial.gradient_zero_y) * canvas.clientHeight
+    );
+    if (Math.min(full, zero) > 36) return;
+    dragging = full <= zero ? "full" : "zero";
+    canvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!dragging) return;
+    const [x, y] = getPoint(event);
+    state.spatial["gradient_" + dragging + "_x"] = x;
+    state.spatial["gradient_" + dragging + "_y"] = y;
+    updateGradientOverlay();
+    schedulePreview();
+  });
+  const finishDrag = () => { dragging = null; };
+  canvas.addEventListener("pointerup", finishDrag);
+  canvas.addEventListener("pointercancel", finishDrag);
+  canvas.addEventListener("lostpointercapture", finishDrag);
+}
+
 function updateSplit() {
   const value = Number(elements.compareSlider.value);
   elements.corrected.style.clipPath = "inset(0 0 0 " + value + "%)";
