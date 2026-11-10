@@ -52,6 +52,7 @@ const state = {
   previewWidth: 0,
   previewHeight: 0,
   sourcePreview: null,
+  displayBefore: null,
   previewWorker: null,
   previewInFlight: false,
   previewWanted: false,
@@ -462,10 +463,9 @@ function ensurePreviewWorker() {
         0, 0
       );
       if (data.beforeBuffer) {
+        state.displayBefore = new Uint8ClampedArray(data.beforeBuffer);
         elements.original.getContext("2d").putImageData(
-          new ImageData(
-            new Uint8ClampedArray(data.beforeBuffer), data.width, data.height
-          ), 0, 0
+          new ImageData(state.displayBefore, data.width, data.height), 0, 0
         );
       }
       status("Preview updated. Local corrections and geometry are included in export.");
@@ -547,6 +547,7 @@ function loadBitmap(bitmap, filename) {
   ctx.clearRect(0, 0, previewWidth, previewHeight);
   ctx.drawImage(bitmap, 0, 0, previewWidth, previewHeight);
   state.sourcePreview = ctx.getImageData(0, 0, previewWidth, previewHeight).data;
+  state.displayBefore = state.sourcePreview;
   elements.corrected.getContext("2d").drawImage(
     elements.original, 0, 0, previewWidth, previewHeight
   );
@@ -758,7 +759,8 @@ function installPatchSelection() {
     const end = pointerPosition(event);
     try {
       const measured = measureNeutralPatch(
-        state.sourcePreview, state.previewWidth, state.previewHeight,
+        state.displayBefore ?? state.sourcePreview,
+        state.previewWidth, state.previewHeight,
         [...start, ...end], elements.calibrationHex.value
       );
       let limited = false;
