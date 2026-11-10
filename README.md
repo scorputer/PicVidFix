@@ -7,7 +7,7 @@ original Python `HueSatVal3.py` engine.
 
 | Edition | Status | How to run |
 | --- | --- | --- |
-| **Web v0.1** | Browser-based photo editor (no server uploads) | Open `web/` through a static HTTP server, or deploy it to Cloudflare Pages |
+| **Web v0.2** | Browser-based photo editor (no server uploads) | Open `web/` through a static HTTP server, or deploy it to Cloudflare Pages |
 | **Desktop v1.5** | Python image/video editor with dynamic subject-region exposure | `py video_color_gui.py` |
 | **Standalone v1.5** | Same desktop app in a single Python file | `py HueSatVal_v1_5_standalone.py` |
 
@@ -22,8 +22,10 @@ py -m http.server 8787
 
 Open **http://localhost:8787/web/** in your browser.
 
-Web v0.1 supports photo loading, exact-value adjustment fields, correction
-presets, neutral-patch white balance, before/after comparison, and PNG export.
+Web v0.2 supports photo loading, precise controls, correction presets,
+neutral-patch white balance, before/after comparison, and PNG export.
+It now includes geometric straightening/perspective and editable graduated
+foreground/background or radial exposure masks.
 Preview and export use the same JavaScript processing function. For speed, the
 preview runs at a reduced resolution while export runs at full resolution,
 so fine detail and edge feathering can differ slightly. The current web
