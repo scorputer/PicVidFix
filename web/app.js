@@ -864,6 +864,42 @@ async function exportPNG() {
   }
 }
 
+function installSpatialEvents() {
+  for (const [id, setting] of [
+    ["flipHorizontal", "flip_horizontal"],
+    ["flipVertical", "flip_vertical"],
+    ["gradientEnabled", "gradient_enabled"]
+  ]) {
+    $(id).addEventListener("change", (event) => {
+      state.spatial[setting] = event.target.checked;
+      updateGradientOverlay();
+      schedulePreview();
+    });
+  }
+  $("gradientType").addEventListener("change", (event) => {
+    state.spatial.gradient_type = event.target.value;
+    updateGradientOverlay();
+    schedulePreview();
+  });
+  $("showGradientHandles").addEventListener("change", (event) => {
+    state.showGradientHandles = event.target.checked;
+    updateGradientOverlay();
+  });
+  $("swapGradient").addEventListener("click", () => {
+    for (const axis of ["x", "y"]) {
+      const full = state.spatial["gradient_full_" + axis];
+      state.spatial["gradient_full_" + axis] =
+        state.spatial["gradient_zero_" + axis];
+      state.spatial["gradient_zero_" + axis] = full;
+    }
+    updateGradientOverlay();
+    schedulePreview();
+  });
+  $("resetGeometry").addEventListener("click", resetGeometry);
+  $("resetGradient").addEventListener("click", resetGradient);
+  installGradientDrag();
+}
+
 function installEvents() {
   for (const id of ["openButton", "emptyOpenButton"]) {
     $(id).addEventListener("click", () => elements.fileInput.click());
@@ -920,7 +956,9 @@ function installEvents() {
 }
 
 buildControls();
+buildSpatialControls();
 installEvents();
+installSpatialEvents();
 installPatchSelection();
 updateSplit();
 syncAllControls();
