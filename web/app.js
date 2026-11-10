@@ -11,6 +11,11 @@ import {
   measureNeutralPatch,
   validatedSettings
 } from "./color-engine.js";
+import {
+  SPATIAL_DEFAULTS,
+  SPATIAL_CONTROLS,
+  validatedSpatial
+} from "./spatial-engine.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -19,6 +24,7 @@ const elements = {
   original: $("originalCanvas"),
   corrected: $("correctedCanvas"),
   selection: $("selectionCanvas"),
+  gradientOverlay: $("gradientCanvas"),
   stage: $("stage"),
   emptyState: $("emptyState"),
   splitLine: $("splitLine"),
@@ -37,6 +43,8 @@ const elements = {
 
 const state = {
   settings: { ...DEFAULTS },
+  spatial: { ...SPATIAL_DEFAULTS },
+  showGradientHandles: true,
   bitmap: null,
   filename: null,
   width: 0,
@@ -54,6 +62,7 @@ const state = {
 };
 
 const controls = new Map();
+const spatialControls = new Map();
 
 function status(message, error = false) {
   elements.status.textContent = message;
@@ -83,6 +92,10 @@ function settingsSnapshot() {
   return validatedSettings(state.settings);
 }
 
+function spatialSnapshot() {
+  return validatedSpatial(state.spatial);
+}
+
 function formatValue(id, value) {
   if (id.startsWith("hue_")) return String(Math.round(value));
   return String(Number(value.toFixed(5)));
@@ -101,10 +114,12 @@ function syncAllControls() {
   for (const { id } of CONTROLS) syncControl(id);
   elements.remapEnabled.checked = state.settings.remap_enabled;
   elements.remapHex.value = state.settings.remap_hex;
+  syncSpatialControls();
 }
 
 function resetAll() {
   state.settings = { ...DEFAULTS };
+  state.spatial = { ...SPATIAL_DEFAULTS };
   elements.calibrationHex.value = "FFFFFF";
   syncAllControls();
   schedulePreview();
@@ -218,7 +233,14 @@ function ensurePreviewWorker() {
         new ImageData(new Uint8ClampedArray(data.buffer), data.width, data.height),
         0, 0
       );
-      status("Preview updated. Export uses the same correction engine at full resolution.");
+      if (data.beforeBuffer) {
+        elements.original.getContext("2d").putImageData(
+          new ImageData(
+            new Uint8ClampedArray(data.beforeBuffer), data.width, data.height
+          ), 0, 0
+        );
+      }
+      status("Preview updated. Local corrections and geometry are included in export.");
     }
     if (state.previewWanted) dispatchPreview();
   };
@@ -238,8 +260,10 @@ function schedulePreview() {
 function dispatchPreview() {
   if (!state.sourcePreview || !state.previewWanted || state.previewInFlight) return;
   let settings;
+  let spatial;
   try {
     settings = settingsSnapshot();
+    spatial = spatialSnapshot();
   } catch (error) {
     status(error.message, true);
     return;
@@ -254,7 +278,9 @@ function dispatchPreview() {
     width: state.previewWidth,
     height: state.previewHeight,
     buffer: copy.buffer,
-    settings
+    settings,
+    spatial,
+    mode: "preview"
   }, [copy.buffer]);
   status("Updating preview...");
 }
@@ -282,7 +308,9 @@ function loadBitmap(bitmap, filename) {
   state.previewWidth = previewWidth;
   state.previewHeight = previewHeight;
 
-  for (const canvas of [elements.original, elements.corrected, elements.selection]) {
+  for (const canvas of [
+    elements.original, elements.corrected, elements.selection, elements.gradientOverlay
+  ]) {
     canvas.width = previewWidth;
     canvas.height = previewHeight;
   }
@@ -298,6 +326,7 @@ function loadBitmap(bitmap, filename) {
   state.selectingPatch = false;
   elements.selection.hidden = true;
   elements.sample.textContent = "Select neutral patch";
+  updateGradientOverlay();
 
   elements.stage.hidden = false;
   elements.emptyState.hidden = true;
@@ -408,7 +437,8 @@ function savePreset() {
     const payload = {
       schema: "picvidfix-web-preset",
       version: 1,
-      settings: settingsSnapshot()
+      settings: settingsSnapshot(),
+      spatial: spatialSnapshot()
     };
     downloadBlob(
       new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
@@ -446,7 +476,9 @@ async function loadPreset(file) {
       converted.remap_hex = raw.remap_hex || DEFAULTS.remap_hex;
     }
 
+    const spatial = validatedSpatial(raw.spatial ?? SPATIAL_DEFAULTS);
     state.settings = validatedSettings(converted);
+    state.spatial = spatial;
     syncAllControls();
     schedulePreview();
     toast("Preset loaded. Existing image retained.");
@@ -459,6 +491,7 @@ function setPatchSelection(enabled) {
   state.selectingPatch = enabled;
   elements.selection.hidden = !enabled;
   elements.sample.textContent = enabled ? "Cancel selection" : "Select neutral patch";
+  updateGradientOverlay();
   const context = elements.selection.getContext("2d");
   context.clearRect(0, 0, state.previewWidth, state.previewHeight);
   if (enabled) status("Drag a rectangle over a neutral area of the photo.");
@@ -526,8 +559,10 @@ function installPatchSelection() {
 async function exportPNG() {
   if (!state.bitmap || state.busyExporting) return;
   let settings;
+  let spatial;
   try {
     settings = settingsSnapshot();
+    spatial = spatialSnapshot();
   } catch (error) {
     status("Export settings error: " + error.message, true);
     return;
@@ -592,7 +627,8 @@ async function exportPNG() {
     };
     status("Applying full-resolution color corrections...");
     worker.postMessage({
-      id: 1, width, height, buffer: imageData.data.buffer, settings
+      id: 1, width, height, buffer: imageData.data.buffer, settings,
+      spatial, mode: "export"
     }, [imageData.data.buffer]);
   } catch (error) {
     status("Export failed: " + error.message, true);
