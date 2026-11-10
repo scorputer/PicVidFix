@@ -1,74 +1,104 @@
-# PicVidFix Web v0.1
+# PicVidFix Web v0.2
 
-A free static photo editor running entirely on the user's computer. Host the
-files on Cloudflare Pages, GitHub Pages, or any HTTP static server. No
-Cloudflare Workers, R2 storage, paid services, build tooling, or server uploads
-are used.
+A free static photo editor that performs processing locally in the browser.
+Deploy to Cloudflare Pages, GitHub Pages, or any static HTTP server. It uses no
+server uploads, paid image-processing API, package installation, or cloud jobs.
 
 ## Included features
 
-- JPG/PNG/WebP and other browser-supported image decoding
-- Editable numeric fields and sliders for light, color, sharpness and RGB gains
-- Selective blue remap with editable hue bounds
-- Before/after split preview
-- Patch-based white balance using a sampled rectangle
-- JSON preset export and import, including basic import of desktop presets
-- PNG export at original resolution, using the same JS correction pipeline
-- Web Workers keep the UI responsive during preview and export
-- Friendly desktop fallback messaging for videos and very large images
-- A generated demo image to explore without uploading any files
+- Image open, drag and drop, and an offline-generated demo image
+- Precise numeric inputs and sliders for exposure, tone, color and sharpness
+- Split before/after comparison
+- White-balance calibration from a neutral patch
+- Selective blue replacement
+- **Geometry:** straighten/rotate, vertical/horizontal perspective, flip
+- **Local correction:** draggable linear foreground/background or radial masks
+- Regional exposure and saturation with smooth feathering
+- Individual controls, geometry and gradient reset buttons
+- JSON presets retaining geometry and gradient handle coordinates
+- Original-resolution PNG export through the same processing functions
+- Web Workers keep editing responsive and avoid server processing
+- Friendly link to desktop version for videos and oversized images
 
-**Limitations:** The browser prototype currently edits still images only.
-Unlike the desktop version, it does not yet offer video export or dynamic
-subject-priority auto-exposure. Processing is performed at preview resolution
-for interactive display and full resolution for PNG export. This causes possible
-scale-dependent differences around sharp edges, Gaussian blue-mask feathering,
-and sharpening. Canvas color conversions can differ slightly from OpenCV, and
-browser decode/encode pipelines may alter embedded image metadata or profiles.
-The UI limits inputs to 24 megapixels and 75 MB to reduce memory crashes.
+## Use the new correction tools
+
+### Geometry
+
+Open **Geometry**, drag the straighten slider to level a horizon, and use
+vertical or horizontal perspective to adjust converging lines. Flip controls
+mirror the image. Geometry keeps the original canvas size, so rotated corners
+can become transparent. Reset Geometry restores all geometry defaults.
+
+### Regional gradient
+
+Open **Regional gradient**, enable **Apply regional adjustments**, and select
+either **Linear** or **Radial**. Drag the **Full** handle over the subject or
+foreground to receive all of the correction. Drag the **Fade** handle into the
+area that should be preserved. Change regional exposure and saturation.
+**Swap direction** interchanges the handles. Untick **Show draggable handles**
+for an unobstructed preview. Gradient handles are stored as normalized
+coordinates to preserve their positions when exporting at original resolution.
+
+This release supports **one gradient at a time**, not brush masks, segmentation
+or multiple combined masks. Geometry and color adjustments are non-destructive
+until export. No AI subject-tracking or video editing exists in the browser yet.
+
+## Local preview and export caveats
+
+The original and corrected previews are both geometrically transformed, so
+split-view comparison remains aligned. The preview uses reduced-resolution
+pixels for speed, while export uses original-resolution pixels, allowing slight
+differences in sharpening, feathering and image resampling. Conversion and
+color profile behavior may differ from the OpenCV desktop implementation.
+
+Geometry produces transparent border pixels instead of automatically cropping.
+Strong perspective settings can introduce stretched or clipped regions. The
+browser limits images to 24 megapixels and input files to 75 MB to reduce
+out-of-memory crashes. Please preserve your original images.
 
 ## Run locally
 
-From the repository root, start a web server:
+From the repository root:
 
 ```powershell
 py -m http.server 8787
 ```
 
-Then open <http://localhost:8787/web/>. Do not open `index.html` directly
-with the `file://` protocol because module Web Workers may be blocked.
+Open <http://localhost:8787/web/>. Do not use a direct `file://` URL;
+module Web Workers typically require an HTTP or HTTPS origin.
 
-## Automated tests
+## Run automated checks
 
-Node.js 20+:
+Requires Node.js 20+; no dependencies or npm install needed:
 
 ```powershell
 cd web
-npm test
 npm run check
+npm test
 ```
 
-Tests need no npm install and no third-party dependencies.
+## Publish on Cloudflare Pages with $0 hosting
 
-## Deploy on Cloudflare Pages for $0
+1. In Cloudflare, create a **Pages** project connected to GitHub.
+2. Connect `scorputer/PicVidFix`, branch `main`.
+3. Choose no framework, leave the build command empty, set the **root directory
+   to the repository root** and the **output directory to `web`**.
+4. Deploy to the generated `*.pages.dev` site.
 
-1. Log into Cloudflare and open **Workers & Pages → Create → Pages**.
-2. Connect the GitHub repository **scorputer/PicVidFix**.
-3. Select the `main` branch.
-4. Configure: **framework preset: None**, **build command: blank**,
-   **build output directory: `web`**, **root directory: repository root**.
-5. Deploy. Cloudflare supplies a `*.pages.dev` address. A custom domain is
-   optional.
+Dashboard wording and free-tier limits can change. The site does not require
+Cloudflare Containers or R2.
 
-Cloudflare's dashboard labels and free-tier quotas may change. This setup
-only hosts static files; the browser does all image processing.
+## Privacy
 
-## Privacy and architecture
+All local image processing is performed in a browser Worker. Source image
+bytes are not transmitted to a processing server by this application. The
+application makes no network calls to transmit user images, but the hosting
+provider still serves static website assets.
 
-JavaScript code performs image corrections in a dedicated Web Worker and
-delivers the resulting PNG through a local Blob URL. It does not send files
-to an API, server, or storage bucket. GitHub is used only to serve the editor's
-static code at deployment time. User-supplied images never leave the browser
-through the editor.
+## Future improvements
 
-For larger videos, use the existing desktop Python app in the repository root.
+- Luminance masks for highlights, shadows, and subject protection
+- Multiple editable masks with blend/combination modes
+- Edge-aware masking, semantic subject segmentation
+- Tone curves, lens distortion correction, inpainting, dehazing
+- Browser video preview and desktop processing handoff
