@@ -100,18 +100,21 @@ function solve8(matrix, vector) {
  * Corners are mapped from destination into source, so samples never need
  * approximate forward-splat interpolation.
  */
-function inverseHomography(settings) {
+function inverseHomography(settings, aspectRatio) {
   const angle = settings.rotation * Math.PI / 180;
   const cosine = Math.cos(angle);
   const sine = Math.sin(angle);
   const p = settings.perspective_vertical;
   const q = settings.perspective_horizontal;
+  // Use square-pixel coordinates. Rotating normalized X/Y independently
+  // would shear a photo whenever its aspect ratio was not 1:1.
   const corners = [
-    [-1, -1], [1, -1], [1, 1], [-1, 1]
+    [-aspectRatio, -1], [aspectRatio, -1],
+    [aspectRatio, 1], [-aspectRatio, 1]
   ];
   const destination = corners.map(([x, y]) => {
     const warpedX = x * (1 + p * y);
-    const warpedY = y * (1 + q * x);
+    const warpedY = y * (1 + q * x / aspectRatio);
     return [
       warpedX * cosine - warpedY * sine,
       warpedX * sine + warpedY * cosine
@@ -149,12 +152,14 @@ export function transformPixels(source, width, height, input = {}) {
   const s = validatedSpatial(input);
   if (geometryIsNeutral(s)) return new Uint8ClampedArray(source);
 
-  const matrix = inverseHomography(s);
+  const aspectRatio = width / height;
+  const matrix = inverseHomography(s, aspectRatio);
   const result = new Uint8ClampedArray(source.length);
   for (let y = 0; y < height; y++) {
     const v = height === 1 ? 0 : (2 * y / (height - 1) - 1);
     for (let x = 0; x < width; x++) {
-      const u = width === 1 ? 0 : (2 * x / (width - 1) - 1);
+      const u = width === 1
+        ? 0 : (2 * x / (width - 1) - 1) * aspectRatio;
       const scale = matrix[6] * u + matrix[7] * v + 1;
       if (Math.abs(scale) < 1e-9) continue;
       let sourceU = (matrix[0] * u + matrix[1] * v + matrix[2]) / scale;
@@ -163,7 +168,8 @@ export function transformPixels(source, width, height, input = {}) {
       if (s.flip_horizontal) sourceU = -sourceU;
       if (s.flip_vertical) sourceV = -sourceV;
 
-      const sx = width === 1 ? 0 : (sourceU + 1) * (width - 1) / 2;
+      const sx = width === 1
+        ? 0 : (sourceU / aspectRatio + 1) * (width - 1) / 2;
       const sy = height === 1 ? 0 : (sourceV + 1) * (height - 1) / 2;
       if (sx < -0.001 || sx > width - 1 + 0.001
         || sy < -0.001 || sy > height - 1 + 0.001) {
