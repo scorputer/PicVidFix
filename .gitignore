@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.vs/
+.vscode/
+*.log
+*.tmp
+*_graded.mp4
+*_graded.png
+.huesatval_export_*/
