@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101522">
+  <meta name="description" content="Free, private, browser-based photo color correction. Your images stay on your device.">
+  <title>PicVidFix | Photo Lab</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="wordmark" href="./" aria-label="PicVidFix home">
+      <span class="mark" aria-hidden="true">◈</span>
+      <span>PicVid<span class="highlight">Fix</span></span>
+      <span class="version">WEB 0.1</span>
+    </a>
+    <div class="header-right">
+      <span class="private-label"><span class="dot"></span> Processed on your device</span>
+      <a class="header-link" href="https://github.com/scorputer/PicVidFix" target="_blank" rel="noopener noreferrer">Desktop + source <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="intro">
+      <div>
+        <p class="eyebrow">THE COLOR WORKBENCH</p>
+        <h1>Make the light <em>work for you.</em></h1>
+        <p class="subhead">Correct color, recover a mood, or experiment with an entirely different look. No account, uploads, or subscription.</p>
+      </div>
+      <div class="release-pill"><span class="dot"></span> Free browser edition</div>
+    </div>
+
+    <section class="workspace" aria-label="Image editor">
+      <div class="editor">
+        <div class="editor-toolbar">
+          <div class="toolbar-group">
+            <button type="button" class="button primary" id="openButton"><span aria-hidden="true">＋</span> Open photo</button>
+            <button type="button" class="button subtle" id="demoButton">Try demo</button>
+          </div>
+          <div class="toolbar-group">
+            <button type="button" class="button subtle" id="savePresetButton">Save preset</button>
+            <button type="button" class="button subtle" id="loadPresetButton">Load preset</button>
+            <button type="button" class="button subtle" id="resetAllButton">Reset all</button>
+          </div>
+        </div>
+
+        <div class="stage-shell">
+          <div id="emptyState" class="empty-state">
+            <div class="empty-art" aria-hidden="true">
+              <span class="sun">☼</span>
+              <span class="horizon"></span>
+              <span class="ridge a"></span>
+              <span class="ridge b"></span>
+            </div>
+            <h2>Your next image starts here.</h2>
+            <p>Drag in a JPG, PNG, or WebP, or choose a sample to play with the controls.</p>
+            <div class="empty-actions">
+              <button type="button" class="button primary" id="emptyOpenButton">Choose an image</button>
+              <button type="button" class="button subtle" id="emptyDemoButton">Use sample</button>
+            </div>
+          </div>
+
+          <div id="stage" class="stage" hidden aria-label="Original and corrected image comparison">
+            <canvas id="originalCanvas" aria-label="Original image"></canvas>
+            <canvas id="correctedCanvas" aria-label="Corrected image"></canvas>
+            <canvas id="selectionCanvas" aria-label="Neutral color patch selection" hidden></canvas>
+            <div class="image-tag original-tag">ORIGINAL</div>
+            <div class="image-tag edited-tag">CORRECTED</div>
+            <div id="splitLine" class="split-line" aria-hidden="true"><span class="split-knob">↔</span></div>
+          </div>
+        </div>
+
+        <div class="compare-controls">
+          <label for="compareSlider">Before <span class="mid-label">⇆</span> After</label>
+          <input id="compareSlider" type="range" min="0" max="100" step="1" value="50" aria-label="Before and after comparison slider">
+          <output id="compareValue" for="compareSlider">50%</output>
+        </div>
+
+        <div class="editor-footer">
+          <div class="file-details">
+            <strong id="filename">No photo selected</strong>
+            <span id="dimensions">Choose a photo to begin</span>
+          </div>
+          <button type="button" class="button primary download" id="downloadButton" disabled>Export PNG <span aria-hidden="true">↓</span></button>
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite">Ready to edit. Your files never leave your browser.</div>
+
+        <div class="desktop-note" id="desktopNote">
+          <div>
+            <span class="note-kicker">WORKING WITH VIDEO?</span>
+            <strong>Use the desktop edition for now.</strong>
+            <p>Video editing and subject-priority auto-exposure are next on the web roadmap. Larger files also benefit from local desktop processing.</p>
+          </div>
+          <a class="button subtle" href="https://github.com/scorputer/PicVidFix" target="_blank" rel="noopener noreferrer">Desktop source ↗</a>
+        </div>
+      </div>
+
+      <aside class="sidebar" aria-label="Correction controls">
+        <div class="sidebar-heading">
+          <div>
+            <p class="eyebrow">YOUR TOOLKIT</p>
+            <h2>Adjustments</h2>
+          </div>
+          <button type="button" class="reset-link" id="sidebarResetButton">Reset all ↺</button>
+        </div>
+
+        <details class="control-section" open>
+          <summary>Light &amp; tone <span class="section-count">6 controls</span></summary>
+          <div id="toneControls" class="control-list"></div>
+        </details>
+        <details class="control-section" open>
+          <summary>Color &amp; detail <span class="section-count">3 controls</span></summary>
+          <div id="colorControls" class="control-list"></div>
+        </details>
+        <details class="control-section">
+          <summary>White balance <span class="section-count">3 gains</span></summary>
+          <div id="gainControls" class="control-list"></div>
+          <div class="calibration">
+            <label for="calibrationHex">Sample target color (RRGGBB)</label>
+            <input id="calibrationHex" type="text" value="FFFFFF" spellcheck="false" maxlength="7" autocomplete="off">
+            <button type="button" class="button subtle block" id="sampleButton" disabled>Select neutral patch</button>
+            <p>Choose a white or neutral-gray area in the original photo to calculate RGB gains.</p>
+          </div>
+        </details>
+        <details class="control-section">
+          <summary>Selective blue remap <span class="section-count">Advanced</span></summary>
+          <label class="toggle-line"><input id="remapEnabled" type="checkbox"><span>Enable blue remapping</span></label>
+          <label class="field-label" for="remapHex">Replacement RGB hex</label>
+          <input type="text" id="remapHex" value="FF8800" maxlength="7" spellcheck="false" autocomplete="off">
+          <div id="hueControls" class="control-list"></div>
+        </details>
+      </aside>
+    </section>
+
+    <div class="footnote"><span>◈ PicVidFix Web v0.1</span><span>Images are processed in-browser. Preview is reduced-resolution for speed; exported PNG uses the original image resolution. Some edge/detail effects can look slightly different at full resolution.</span></div>
+  </main>
+
+  <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif,image/avif" hidden>
+  <input type="file" id="presetInput" accept=".json,application/json" hidden>
+  <div id="toast" class="toast" aria-live="polite" hidden></div>
+</body>
+</html>
