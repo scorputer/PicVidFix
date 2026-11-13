@@ -6,6 +6,7 @@
 | --- | --- |
 | Web v0.1 | Static browser image corrections, comparisons, presets and PNG export |
 | Web v0.2 | Geometry straightening, perspective, flips, draggable linear/radial gradients with regional exposure and saturation, reset controls, and added tests |
+| Web v0.2.1 | Hover/touch X/Y native-resolution output-canvas pixel coordinates with HUD, footer readout, and mapping regression tests |
 
 
 The original project is based on `HueSatVal3.py` (preserved in `baseline/`). Version labels below refer to the project ZIPs developed during the conversation, not reconstructed Git tags.
