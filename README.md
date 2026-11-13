@@ -7,7 +7,7 @@ original Python `HueSatVal3.py` engine.
 
 | Edition | Status | How to run |
 | --- | --- | --- |
-| **Web v0.3.1** | Browser-based photo editor with zoom/pan and analysis ROIs (no server uploads) | Open `web/` through a static HTTP server, or deploy it to Cloudflare Pages |
+| **Web v0.3.2** | Browser-based photo editor with zoom/pan and analysis ROIs (no server uploads) | Open `web/` through a static HTTP server, or deploy it to Cloudflare Pages |
 | **Desktop v1.5.1** | Python image/video editor with dynamic subject-region exposure and region inspector | `py video_color_gui.py` |
 | **Standalone v1.5** | Same desktop app in a single Python file | `py HueSatVal_v1_5_standalone.py` |
 
@@ -22,14 +22,15 @@ py -m http.server 8787
 
 Open **http://localhost:8787/web/** in your browser.
 
-Web v0.3.1 supports photo loading, precise controls, correction presets,
+Web v0.3.2 supports photo loading, precise controls, correction presets,
 neutral-patch white balance, before/after comparison, and PNG export.
 It now includes geometric straightening/perspective and editable graduated
 foreground/background or radial exposure masks.
 A live pixel-position readout reports native-resolution X/Y coordinates while
 hovering or tapping the preview. Zoom/pan controls let you inspect a 5K image
 without reducing its stored resolution. **Draw box** selects a persistent,
-non-destructive rectangle with X/Y/W/H coordinates and downloadable ROI JSON.
+non-destructive rectangle with X/Y/W/H and four-corner coordinates,
+plus downloadable ROI JSON.
 Preview and export use the same JavaScript processing function. For speed, the
 preview runs at a reduced resolution while export runs at full resolution,
 so fine detail and edge feathering can differ slightly. The current web
@@ -53,7 +54,9 @@ The desktop app retains manual color adjustment, image mode, video mode,
 subject-priority exposure analysis over a fixed frame region, presets and
 MP4 export. **Inspect / Draw box** opens a zoomable, panning ROI inspector
 that can export pixel-precise rectangle coordinates as JSON. Hovering over
-either main preview now displays full-resolution cursor coordinates. Preview playback is silent. Variable-frame-rate and HDR handling
+either main preview now displays full-resolution cursor coordinates.
+Double-click either main preview, or use **Zoom / Inspect / Box**, to open
+the zoomable desktop region inspector. The main panels are fit-to-window. Preview playback is silent. Variable-frame-rate and HDR handling
 are outside its current scope.
 
 ## Project layout
