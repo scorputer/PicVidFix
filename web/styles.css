@@ -116,8 +116,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .button.primary:hover:not(:disabled) { background: #aeffdc; border-color: #aeffdc; }
 .button.subtle { background: transparent; }
 .button.block { width: 100%; }
-.stage-shell {
+.stage-outer {
+  position: relative;
   margin: 18px 20px 0;
+}
+.stage-shell {
+  margin: 0;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid #283545;
@@ -345,7 +349,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   .workspace { grid-template-columns: minmax(0,1fr) 290px; gap: 15px; }
   .page { padding-left: 20px; padding-right: 20px; }
   .editor-toolbar { padding: 14px; }
-  .stage-shell { margin: 14px 14px 0; }
+  .stage-outer { margin: 14px 14px 0; }
   .view-toolbar { padding: 10px 14px; }
   .desktop-note { margin-left: 14px; margin-right: 14px; }
 }
