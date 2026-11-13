@@ -9,6 +9,7 @@
 | Web v0.2.1 | Hover/touch X/Y native-resolution output-canvas pixel coordinates with HUD, footer readout, and mapping regression tests |
 | Web v0.3 | Fit, 100%, incremental zoom, cursor-based wheel zoom, scrolling/panning, and adaptive high-detail preview |
 | Web v0.3.1 | Persistent drag-to-select bounding box overlay, X/Y/W/H readout, downloadable machine-readable ROI JSON, and regression tests |
+| Web v0.3.2 | Display all four inclusive ROI corner coordinates with regression tests |
 
 
 The original project is based on `HueSatVal3.py` (preserved in `baseline/`). Version labels below refer to the project ZIPs developed during the conversation, not reconstructed Git tags.
@@ -24,3 +25,5 @@ The original project is based on `HueSatVal3.py` (preserved in `baseline/`). Ver
 | v1.5.1 | Main-preview X/Y cursor display, zoomable/pannable ROI inspector popup, non-destructive box overlays and JSON export | Current modular desktop GUI + region_inspector.py; standalone remains v1.5 |
 
 Historical GUIs are reference snapshots and are **not guaranteed to work** with the current root pipeline. To reproduce a specific historical version, use that version's original ZIP or match it with its contemporaneous dependencies. Video samples, complete original test suite, and original packaged releases have not yet been imported.
+
+**Regression policy:** New image geometry, ROI, and numeric correction features should include targeted automated tests and CI coverage before releases. Full interactive GUI validation is an additional manual gate.
