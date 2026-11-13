@@ -26,6 +26,7 @@ from typing import Callable
 import cv2
 from PIL import Image, ImageTk
 
+from region_inspector import RegionInspector
 from color_pipeline import (
     AutoExposureSettings,
     ColorSettings,
@@ -482,6 +483,9 @@ class VideoColorApp:
         self.preview_hint = tk.StringVar(
             value="Open a video or image. Video preview playback is silent; exports keep original audio."
         )
+        # Region inspection is an annotation, independent of color settings.
+        self.region_box: tuple[int, int, int, int] | None = None
+        self.pixel_position = tk.StringVar(value="X: —  Y: —")
         # Subject-priority auto exposure works across successive frames.
         # The selected ROI is normalized to source image dimensions.
         self.auto_enabled = tk.BooleanVar(value=False)
@@ -546,6 +550,9 @@ class VideoColorApp:
             state="disabled",
         )
         self.cancel_button.pack(side="left")
+        ttk.Button(
+            header, text="Inspect / Draw box", command=self._inspect_region
+        ).pack(side="left", padx=(10, 0))
 
         main = ttk.Frame(outer)
         main.pack(fill="both", expand=True)
@@ -567,6 +574,16 @@ class VideoColorApp:
         self.adjusted_label.pack(fill="both", expand=True)
         self.original_photo = None
         self.adjusted_photo = None
+        self.original_label.bind(
+            "<Motion>", lambda event: self._hover_preview_pixel(event, True)
+        )
+        self.adjusted_label.bind(
+            "<Motion>", lambda event: self._hover_preview_pixel(event, False)
+        )
+        for label in (self.original_label, self.adjusted_label):
+            label.bind(
+                "<Leave>", lambda _event: self.pixel_position.set("X: —  Y: —")
+            )
 
         player = ttk.Frame(preview_area)
         player.pack(fill="x", pady=(10, 0))
@@ -575,6 +592,9 @@ class VideoColorApp:
         ttk.Label(player, textvariable=self.timeline_text, width=18).pack(
             side="right"
         )
+        ttk.Label(
+            player, textvariable=self.pixel_position, width=24
+        ).pack(side="right", padx=(0, 8))
         self.timeline = ttk.Scale(
             player,
             from_=0,
@@ -1063,6 +1083,7 @@ class VideoColorApp:
         self.source_path = path
         self.media_kind = kind
         self.source_frame = frame
+        self.region_box = None
         self.current_frame = 0
         if kind == "image":
             if self.capture is not None:
@@ -1098,6 +1119,7 @@ class VideoColorApp:
         self.frame_count = max(0, int(candidate.get(cv2.CAP_PROP_FRAME_COUNT)))
         self.fps = candidate.get(cv2.CAP_PROP_FPS) or 30.0
         self.media_kind = "video"
+        self.region_box = None
         self.auto_analysis_cancel.set()
         self.auto_levels = None
         self.auto_levels_key = None
@@ -1147,6 +1169,8 @@ class VideoColorApp:
         if not ok:
             self.status.set(f"Unable to decode frame {index}.")
             return
+        if self.current_frame != index:
+            self.region_box = None
         self.current_frame = index
         self.source_frame = frame
         self.setting_timeline = True
@@ -1195,6 +1219,57 @@ class VideoColorApp:
         else:
             converted = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         return ImageTk.PhotoImage(Image.fromarray(converted))
+
+    def _hover_preview_pixel(self, event, original: bool) -> None:
+        """Map a scaled, centered Tk preview image to full-size X/Y pixels."""
+        photo = self.original_photo if original else self.adjusted_photo
+        label = self.original_label if original else self.adjusted_label
+        if self.source_frame is None or photo is None:
+            self.pixel_position.set("X: —  Y: —")
+            return
+        photo_width = photo.width()
+        photo_height = photo.height()
+        image_x = event.x - (label.winfo_width() - photo_width) / 2
+        image_y = event.y - (label.winfo_height() - photo_height) / 2
+        if not (0 <= image_x < photo_width and 0 <= image_y < photo_height):
+            self.pixel_position.set("X: —  Y: —")
+            return
+        height, width = self.source_frame.shape[:2]
+        x = min(width - 1, int(image_x * width / photo_width))
+        y = min(height - 1, int(image_y * height / photo_height))
+        self.pixel_position.set(f"X: {x:,}  Y: {y:,}")
+
+    def _store_region_box(
+        self, box: tuple[int, int, int, int] | None
+    ) -> None:
+        """Store the latest full-resolution annotation for later workflows."""
+        self.region_box = box
+        if box is None:
+            self.status.set("Region annotation cleared.")
+        else:
+            x, y, width, height = box
+            self.status.set(
+                f"Region selected: X={x}, Y={y}, W={width}, H={height}"
+            )
+        self._schedule_preview()
+
+    def _inspect_region(self) -> None:
+        """Open a zoomable image inspector with a draggable ROI rectangle."""
+        if self.source_frame is None:
+            messagebox.showinfo("Inspect region", "Open a photo or video first.")
+            return
+        self._pause()
+        filename = (
+            self.source_path.name if self.source_path is not None else "image"
+        )
+        RegionInspector(
+            self.root,
+            self.source_frame,
+            filename,
+            on_box=self._store_region_box,
+            initial_box=self.region_box,
+            frame_index=self.current_frame if self.media_kind == "video" else None,
+        )
 
     def _render_preview(self) -> None:
         """Snapshot the frame and corrections for the background preview."""
@@ -1248,18 +1323,30 @@ class VideoColorApp:
         ).start()
 
     def _display_preview(self, original, corrected) -> None:
-        """Only the main UI thread may construct Tk image objects."""
-        shown_original = original
+        """Draw analysis overlays only on previews, never on exported images."""
+        shown_original = original.copy()
+        shown_corrected = corrected.copy()
+        h, w = shown_original.shape[:2]
         if self.auto_enabled.get():
-            shown_original = original.copy()
-            h, w = shown_original.shape[:2]
             x1, y1, x2, y2 = self.auto_roi
             cv2.rectangle(
                 shown_original, (round(x1 * w), round(y1 * h)),
                 (round(x2 * w), round(y2 * h)), (255, 255, 0), 2,
             )
+
+        if self.region_box is not None and self.source_frame is not None:
+            full_height, full_width = self.source_frame.shape[:2]
+            x, y, box_width, box_height = self.region_box
+            start = (round(x * w / full_width), round(y * h / full_height))
+            end = (
+                round((x + box_width) * w / full_width),
+                round((y + box_height) * h / full_height),
+            )
+            for preview in (shown_original, shown_corrected):
+                cv2.rectangle(preview, start, end, (165, 235, 134), 2)
+
         self.original_photo = self._to_photo(shown_original)
-        self.adjusted_photo = self._to_photo(corrected)
+        self.adjusted_photo = self._to_photo(shown_corrected)
         self.original_label.configure(image=self.original_photo, text="")
         self.adjusted_label.configure(image=self.adjusted_photo, text="")
 
