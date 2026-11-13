@@ -14,7 +14,7 @@
     <a class="wordmark" href="./" aria-label="PicVidFix home">
       <span class="mark" aria-hidden="true">◈</span>
       <span>PicVid<span class="highlight">Fix</span></span>
-      <span class="version">WEB 0.3</span>
+      <span class="version">WEB 0.3.1</span>
     </a>
     <div class="header-right">
       <span class="private-label"><span class="dot"></span> Processed on your device</span>
@@ -68,6 +68,7 @@
             <canvas id="correctedCanvas" aria-label="Corrected image"></canvas>
             <canvas id="selectionCanvas" aria-label="Neutral color patch selection" hidden></canvas>
             <canvas id="gradientCanvas" aria-label="Move full-effect and no-effect gradient handles" hidden></canvas>
+            <canvas id="regionCanvas" aria-label="Drag from one corner to another to select a bounding box" hidden></canvas>
             <div class="image-tag original-tag">ORIGINAL</div>
             <div class="image-tag edited-tag">CORRECTED</div>
             <div id="splitLine" class="split-line" aria-hidden="true"><span class="split-knob">↔</span></div>
@@ -88,6 +89,15 @@
             <button type="button" class="button subtle" id="panButton" aria-pressed="false" title="Drag to pan the zoomed image (or hold Space)">Pan</button>
           </div>
           <div class="view-tip">Scroll to move · Ctrl + wheel to zoom · Space + drag to pan</div>
+        </div>
+
+        <div class="region-toolbar" id="regionToolbar" hidden>
+          <div class="region-tools">
+            <button type="button" class="button subtle" id="regionSelect" aria-pressed="false" title="Drag two image corners to define a region">Draw box</button>
+            <button type="button" class="button subtle" id="regionClear" disabled>Clear box</button>
+            <button type="button" class="button subtle" id="regionExport" disabled>Export box JSON ↓</button>
+          </div>
+          <output id="regionReadout" aria-label="Bounding box coordinates">No region selected</output>
         </div>
 
         <div class="compare-controls">
@@ -182,7 +192,7 @@
       </aside>
     </section>
 
-    <div class="footnote"><span>◈ PicVidFix Web v0.3</span><span>Images are processed in-browser. Preview is reduced-resolution for speed; exported PNG uses the original image resolution. Some edge/detail effects can look slightly different at full resolution.</span></div>
+    <div class="footnote"><span>◈ PicVidFix Web v0.3.1</span><span>Images are processed in-browser. Preview is reduced-resolution for speed; exported PNG uses the original image resolution. Some edge/detail effects can look slightly different at full resolution.</span></div>
   </main>
 
   <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif,image/avif" hidden>
