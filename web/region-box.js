@@ -31,6 +31,30 @@ export function rectangleFromCorners(first, second, imageWidth, imageHeight) {
   };
 }
 
+/**
+ * Return the actual pixel coordinates of all four box corners.
+ * These coordinates are INCLUSIVE, matching the visible corner handles.
+ * JSON x2/y2 remain EXCLUSIVE so rectangle dimensions are unambiguous.
+ */
+export function rectangleCorners(box) {
+  if (!box) return null;
+  const right = box.x + box.width - 1;
+  const bottom = box.y + box.height - 1;
+  return {
+    topLeft: { x: box.x, y: box.y },
+    topRight: { x: right, y: box.y },
+    bottomLeft: { x: box.x, y: bottom },
+    bottomRight: { x: right, y: bottom }
+  };
+}
+
+export function formatRectangleCorners(box) {
+  const corners = rectangleCorners(box);
+  if (!corners) return "No region selected";
+  const point = ({ x, y }) => `(${x.toLocaleString("en-US")}, ${y.toLocaleString("en-US")})`;
+  return `TL ${point(corners.topLeft)} · TR ${point(corners.topRight)} · BL ${point(corners.bottomLeft)} · BR ${point(corners.bottomRight)}`;
+}
+
 export function formatRectangle(box) {
   if (!box) return "No region selected";
   return `X: ${box.x}  Y: ${box.y}  W: ${box.width}  H: ${box.height}`;
