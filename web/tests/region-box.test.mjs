@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 
 import {
   rectangleFromCorners,
+  rectangleCorners,
   formatRectangle,
+  formatRectangleCorners,
   exportRectangle
 } from "../region-box.js";
 
@@ -67,4 +69,37 @@ test("box readout is stable, including unselected state", () => {
   assert.equal(formatRectangle({
     x: 20, y: 31, width: 80, height: 100
   }), "X: 20  Y: 31  W: 80  H: 100");
+});
+
+test("all four inclusive corners match selected pixel boundaries", () => {
+  const box = rectangleFromCorners(
+    { x: 1200, y: 900 }, { x: 800, y: 400 }, 5000, 3500
+  );
+  assert.deepEqual(rectangleCorners(box), {
+    topLeft: { x: 800, y: 400 },
+    topRight: { x: 1200, y: 400 },
+    bottomLeft: { x: 800, y: 900 },
+    bottomRight: { x: 1200, y: 900 }
+  });
+  assert.equal(
+    formatRectangleCorners(box),
+    "TL (800, 400) · TR (1,200, 400) · BL (800, 900) · BR (1,200, 900)"
+  );
+});
+
+test("single-pixel selection has four identical corners", () => {
+  assert.deepEqual(
+    rectangleCorners({ x: 12, y: 34, width: 1, height: 1 }),
+    {
+      topLeft: { x: 12, y: 34 },
+      topRight: { x: 12, y: 34 },
+      bottomLeft: { x: 12, y: 34 },
+      bottomRight: { x: 12, y: 34 }
+    }
+  );
+});
+
+test("empty selection has no corner coordinates", () => {
+  assert.equal(rectangleCorners(null), null);
+  assert.equal(formatRectangleCorners(null), "No region selected");
 });
