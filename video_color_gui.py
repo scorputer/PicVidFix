@@ -432,7 +432,7 @@ class VideoColorApp:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("HueSatVal Video & Image Lab v1.5")
+        self.root.title("PicVidFix Video & Image Lab v1.5.1")
         self.root.geometry("1490x900")
         self.root.minsize(1160, 680)
 
