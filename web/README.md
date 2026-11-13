@@ -1,4 +1,4 @@
-# PicVidFix Web v0.3.1
+# PicVidFix Web v0.3.2
 
 A free static photo editor that performs processing locally in the browser.
 Deploy to Cloudflare Pages, GitHub Pages, or any static HTTP server. It uses no
@@ -70,7 +70,10 @@ coordinates together with the original image dimensions, filename, and
 normalized coordinates.
 
 The readout uses **X/Y** for the top-left position and **W/H** for the width
-and height. Coordinates are zero-based on the *output* image canvas after
+and height.
+A second readout shows **TL, TR, BL, BR**, the four included pixel corners,
+updated live during drawing. For a rectangle at X=100, Y=200, W=300, H=150,
+BR is (399, 349). The corners are inclusive while JSON x2/y2 remain exclusive. Coordinates are zero-based on the *output* image canvas after
 geometry correction. JSON uses half-open bounds: `x2 = x + width`,
 `y2 = y + height`. A 1-pixel rectangle has width and height 1.
 The overlay is **not** burned into the corrected PNG.
