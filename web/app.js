@@ -20,6 +20,12 @@ import {
   formatPixelPosition,
   pixelAtPointer
 } from "./pixel-coordinates.js";
+import {
+  fitZoom,
+  clampZoom,
+  zoomDimensions,
+  anchoredScrollDelta
+} from "./viewport-zoom.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -30,6 +36,15 @@ const elements = {
   selection: $("selectionCanvas"),
   gradientOverlay: $("gradientCanvas"),
   stage: $("stage"),
+  stageShell: $("stageShell"),
+  viewToolbar: $("viewToolbar"),
+  zoomSlider: $("zoomSlider"),
+  zoomReadout: $("zoomReadout"),
+  zoomOut: $("zoomOut"),
+  zoomIn: $("zoomIn"),
+  zoomFit: $("zoomFit"),
+  zoom100: $("zoom100"),
+  panButton: $("panButton"),
   pixelHud: $("pixelHud"),
   pixelCoordinates: $("pixelCoordinates"),
   emptyState: $("emptyState"),
@@ -65,7 +80,14 @@ const state = {
   previewTimer: null,
   previewJobId: 0,
   busyExporting: false,
-  selectingPatch: false
+  selectingPatch: false,
+  zoomScale: null,  // null means fit-to-window, otherwise CSS pixels per image pixel
+  spaceHeld: false,
+  panMode: false,
+  panOrigin: null,
+  previewResizeTimer: null,
+  lastPointerX: null,
+  lastPointerY: null
 };
 
 const controls = new Map();
@@ -461,14 +483,17 @@ function showPixelCoordinates(event) {
   const value = formatPixelPosition(point);
   elements.pixelCoordinates.textContent = value;
   elements.pixelHud.textContent = value;
-  elements.pixelHud.hidden = point === null;
+  elements.pixelHud.hidden = false;
+  state.lastPointerX = event.clientX;
+  state.lastPointerY = event.clientY;
 }
 
 function clearPixelCoordinates() {
   const value = formatPixelPosition(null);
   elements.pixelCoordinates.textContent = value;
   elements.pixelHud.textContent = value;
-  elements.pixelHud.hidden = true;
+  // Keep a visible, discoverable X/Y readout when an image is open.
+  elements.pixelHud.hidden = !state.bitmap;
 }
 
 function updateSplit() {
@@ -562,6 +587,10 @@ function loadBitmap(bitmap, filename) {
   state.filename = filename;
   state.width = width;
   state.height = height;
+  state.zoomScale = null;
+  state.panOrigin = null;
+  state.panMode = false;
+  state.spaceHeld = false;
   clearPixelCoordinates();
 
   const previewScale = Math.min(1, 1150 / width, 820 / height);
@@ -593,8 +622,11 @@ function loadBitmap(bitmap, filename) {
 
   elements.stage.hidden = false;
   elements.emptyState.hidden = true;
-  elements.stage.style.aspectRatio = width + " / " + height;
-  elements.stage.style.maxWidth = Math.round(620 * width / height) + "px";
+  elements.stageShell.classList.add("has-image");
+  elements.viewToolbar.hidden = false;
+  updateZoomDisplay();
+  elements.stageShell.scrollLeft = 0;
+  elements.stageShell.scrollTop = 0;
 
   elements.filename.textContent = filename;
   elements.dimensions.textContent = width.toLocaleString() + " × "
