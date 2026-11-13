@@ -207,6 +207,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   color: var(--accent);
   white-space: pre-wrap;
 }
+.region-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 100%;
+}
+#regionCorners {
+  display: block;
+  color: #c9d6e4;
+  font: 600 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#regionCorners[hidden] { display: none; }
+
 
 #gradientType {
   width: 100%;
