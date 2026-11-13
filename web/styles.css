@@ -169,6 +169,45 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   touch-action: none;
 }
 #gradientCanvas:active { cursor: grabbing; }
+#regionCanvas {
+  z-index: 7;
+  pointer-events: none;
+  touch-action: none;
+}
+#regionCanvas.region-editing {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+.region-toolbar {
+  padding: 12px 20px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.region-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+.region-tools .button {
+  min-height: 32px;
+  padding: 6px 10px;
+}
+#regionSelect[aria-pressed=true] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: #173c35;
+}
+#regionReadout {
+  font: 700 12px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  white-space: pre-wrap;
+}
+
 #gradientType {
   width: 100%;
   border: 1px solid #435269;
@@ -351,6 +390,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   .editor-toolbar { padding: 14px; }
   .stage-outer { margin: 14px 14px 0; }
   .view-toolbar { padding: 10px 14px; }
+  .region-toolbar { padding: 10px 14px 4px; }
   .desktop-note { margin-left: 14px; margin-right: 14px; }
 }
 @media (max-width: 880px) {
