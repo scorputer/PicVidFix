@@ -16,6 +16,10 @@ import {
   SPATIAL_CONTROLS,
   validatedSpatial
 } from "./spatial-engine.js";
+import {
+  formatPixelPosition,
+  pixelAtPointer
+} from "./pixel-coordinates.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -26,6 +30,8 @@ const elements = {
   selection: $("selectionCanvas"),
   gradientOverlay: $("gradientCanvas"),
   stage: $("stage"),
+  pixelHud: $("pixelHud"),
+  pixelCoordinates: $("pixelCoordinates"),
   emptyState: $("emptyState"),
   splitLine: $("splitLine"),
   compareSlider: $("compareSlider"),
@@ -438,6 +444,33 @@ function installGradientDrag() {
   canvas.addEventListener("lostpointercapture", finishDrag);
 }
 
+/**
+ * Report full-resolution export-canvas coordinates, not CSS or preview pixels.
+ * Geometry keeps canvas dimensions unchanged, so the same X/Y positions
+ * apply to the aligned before/after comparison and draggable gradient mask.
+ */
+function showPixelCoordinates(event) {
+  if (!state.bitmap || elements.stage.hidden) return;
+  const point = pixelAtPointer(
+    event.clientX,
+    event.clientY,
+    elements.stage.getBoundingClientRect(),
+    state.width,
+    state.height
+  );
+  const value = formatPixelPosition(point);
+  elements.pixelCoordinates.textContent = value;
+  elements.pixelHud.textContent = value;
+  elements.pixelHud.hidden = point === null;
+}
+
+function clearPixelCoordinates() {
+  const value = formatPixelPosition(null);
+  elements.pixelCoordinates.textContent = value;
+  elements.pixelHud.textContent = value;
+  elements.pixelHud.hidden = true;
+}
+
 function updateSplit() {
   const value = Number(elements.compareSlider.value);
   elements.corrected.style.clipPath = "inset(0 0 0 " + value + "%)";
@@ -529,6 +562,7 @@ function loadBitmap(bitmap, filename) {
   state.filename = filename;
   state.width = width;
   state.height = height;
+  clearPixelCoordinates();
 
   const previewScale = Math.min(1, 1150 / width, 820 / height);
   const previewWidth = Math.max(1, Math.round(width * previewScale));
@@ -925,6 +959,13 @@ function installEvents() {
     elements.presetInput.value = "";
   });
   elements.compareSlider.addEventListener("input", updateSplit);
+  // Listen on the stage, not individual canvases: this also works while
+  // adjusting draggable gradients or selecting a white-balance patch.
+  elements.stage.addEventListener("pointermove", showPixelCoordinates);
+  elements.stage.addEventListener("pointerdown", showPixelCoordinates);
+  elements.stage.addEventListener("pointerleave", (event) => {
+    if (event.pointerType !== "touch") clearPixelCoordinates();
+  });
   elements.remapEnabled.addEventListener("change", () => {
     state.settings.remap_enabled = elements.remapEnabled.checked;
     schedulePreview();
