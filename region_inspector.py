@@ -83,6 +83,40 @@ def region_metadata(
     }
 
 
+def box_corners(
+    box: tuple[int, int, int, int],
+) -> dict[str, tuple[int, int]]:
+    """Return all four inclusive pixel corners of a half-open ROI.
+
+    The bottom/right corner is one less than the exclusive slice boundary,
+    matching the pixel beneath the rectangle's visible corner handles.
+    """
+    x, y, width, height = box
+    if width <= 0 or height <= 0:
+        raise ValueError("Region width and height must be positive.")
+    right = x + width - 1
+    bottom = y + height - 1
+    return {
+        "top_left": (x, y),
+        "top_right": (right, y),
+        "bottom_left": (x, bottom),
+        "bottom_right": (right, bottom),
+    }
+
+
+def format_box_corners(
+    box: tuple[int, int, int, int] | None,
+) -> str:
+    """Format native-resolution corner coordinates for the desktop UI."""
+    if box is None:
+        return "Corners: draw a box to inspect its boundaries."
+    corners = box_corners(box)
+    return (
+        f"TL {corners['top_left']}   TR {corners['top_right']}   "
+        f"BL {corners['bottom_left']}   BR {corners['bottom_right']}"
+    )
+
+
 class RegionInspector:
     """Zoom, pan, inspect pixels, and annotate one image rectangle."""
 
@@ -185,6 +219,16 @@ class RegionInspector:
         )
         ttk.Label(footer, textvariable=self.mode_text).pack(side="right")
 
+        corners_row = ttk.Frame(self.window, padding=(8, 0, 8, 8))
+        corners_row.pack(fill="x")
+        self.corners_text = tk.StringVar(
+            value=format_box_corners(self.box)
+        )
+        ttk.Label(
+            corners_row, textvariable=self.corners_text,
+            wraplength=920, justify="left",
+        ).pack(side="left", fill="x")
+
         self.canvas.bind("<Configure>", self._on_resize)
         self.canvas.bind("<Motion>", self._on_pointer)
         self.canvas.bind("<Leave>", self._on_leave)
@@ -270,6 +314,8 @@ class RegionInspector:
             )
 
     def _show_region(self) -> None:
+        """Update position, dimensions, and all four source pixel corners."""
+        self.corners_text.set(format_box_corners(self.box))
         if self.box is None:
             self.region_text.set("No region selected")
         else:
