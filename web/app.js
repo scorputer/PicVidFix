@@ -29,6 +29,7 @@ import {
 import {
   rectangleFromCorners,
   formatRectangle,
+  formatRectangleCorners,
   exportRectangle
 } from "./region-box.js";
 
@@ -46,6 +47,7 @@ const elements = {
   regionClear: $("regionClear"),
   regionExport: $("regionExport"),
   regionReadout: $("regionReadout"),
+  regionCorners: $("regionCorners"),
   stage: $("stage"),
   stageShell: $("stageShell"),
   viewToolbar: $("viewToolbar"),
@@ -794,6 +796,8 @@ function updateRegionUI() {
   elements.regionClear.disabled = !state.regionBox;
   elements.regionExport.disabled = !state.regionBox;
   elements.regionReadout.textContent = formatRectangle(state.regionBox);
+  elements.regionCorners.textContent = formatRectangleCorners(state.regionBox);
+  elements.regionCorners.hidden = !state.regionBox;
   drawRegionBox();
 }
 
