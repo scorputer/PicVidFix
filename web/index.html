@@ -14,7 +14,7 @@
     <a class="wordmark" href="./" aria-label="PicVidFix home">
       <span class="mark" aria-hidden="true">◈</span>
       <span>PicVid<span class="highlight">Fix</span></span>
-      <span class="version">WEB 0.3.1</span>
+      <span class="version">WEB 0.3.2</span>
     </a>
     <div class="header-right">
       <span class="private-label"><span class="dot"></span> Processed on your device</span>
@@ -97,7 +97,10 @@
             <button type="button" class="button subtle" id="regionClear" disabled>Clear box</button>
             <button type="button" class="button subtle" id="regionExport" disabled>Export box JSON ↓</button>
           </div>
-          <output id="regionReadout" aria-label="Bounding box coordinates">No region selected</output>
+          <div class="region-summary">
+            <output id="regionReadout" aria-label="Bounding box dimensions">No region selected</output>
+            <output id="regionCorners" aria-label="Bounding box corner coordinates" hidden></output>
+          </div>
         </div>
 
         <div class="compare-controls">
@@ -192,7 +195,7 @@
       </aside>
     </section>
 
-    <div class="footnote"><span>◈ PicVidFix Web v0.3.1</span><span>Images are processed in-browser. Preview is reduced-resolution for speed; exported PNG uses the original image resolution. Some edge/detail effects can look slightly different at full resolution.</span></div>
+    <div class="footnote"><span>◈ PicVidFix Web v0.3.2</span><span>Images are processed in-browser. Preview is reduced-resolution for speed; exported PNG uses the original image resolution. Some edge/detail effects can look slightly different at full resolution.</span></div>
   </main>
 
   <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif,image/avif" hidden>
