@@ -29,7 +29,7 @@ class RegionInspector:
         parent: tk.Misc,
         frame,
         filename: str,
-        on_box: Callable[[tuple[int, int, int, int]], None],
+        on_box: Callable[[tuple[int, int, int, int] | None], None],
         initial_box: tuple[int, int, int, int] | None = None,
         frame_index: int | None = None,
     ) -> None:
@@ -221,6 +221,12 @@ class RegionInspector:
         )
 
     def _on_pointer(self, event) -> None:
+        source_x = (event.x - self.offset_x) / self.scale
+        source_y = (event.y - self.offset_y) / self.scale
+        if not (0 <= source_x < self.image_width
+                and 0 <= source_y < self.image_height):
+            self.position_text.set("X: —  Y: —")
+            return
         x, y = self._image_point(event.x, event.y)
         self.position_text.set(f"X: {x:,}  Y: {y:,}")
 
@@ -336,6 +342,7 @@ class RegionInspector:
         self.drag_start = None
         self._show_region()
         self._draw_box()
+        self.on_box(None)
 
     def export_box(self) -> None:
         if self.box is None:
