@@ -1,4 +1,4 @@
-# PicVidFix Web v0.2
+# PicVidFix Web v0.2.1
 
 A free static photo editor that performs processing locally in the browser.
 Deploy to Cloudflare Pages, GitHub Pages, or any static HTTP server. It uses no
@@ -9,6 +9,7 @@ server uploads, paid image-processing API, package installation, or cloud jobs.
 - Image open, drag and drop, and an offline-generated demo image
 - Precise numeric inputs and sliders for exposure, tone, color and sharpness
 - Split before/after comparison
+- Live X/Y pixel coordinates on image hover or touch, scaled to full image resolution
 - White-balance calibration from a neutral patch
 - Selective blue replacement
 - **Geometry:** straighten/rotate, vertical/horizontal perspective, flip
@@ -42,6 +43,19 @@ coordinates to preserve their positions when exporting at original resolution.
 This release supports **one gradient at a time**, not brush masks, segmentation
 or multiple combined masks. Geometry and color adjustments are non-destructive
 until export. No AI subject-tracking or video editing exists in the browser yet.
+
+## Pixel position readout
+
+Move your mouse or pointer across the image. The small on-image HUD and
+footer show **X** (horizontal) and **Y** (vertical) in zero-based coordinates
+(upper-left is 0, 0). The position is calculated against the original image's
+full pixel dimensions, not the downsampled preview. You can also tap the
+image on a touch device.
+
+With geometry enabled, the coordinates refer to the **output image canvas**
+rather than the corresponding source-image pixel before warping. The before
+and after views remain aligned on that canvas. Leaving the image clears the
+hover readout (touch keeps the last tapped position).
 
 ## Local preview and export caveats
 
