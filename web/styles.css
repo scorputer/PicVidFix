@@ -116,7 +116,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .button.primary:hover:not(:disabled) { background: #aeffdc; border-color: #aeffdc; }
 .button.subtle { background: transparent; }
 .button.block { width: 100%; }
-.stage-shell { margin: 18px 20px 0; border-radius: 12px; overflow: hidden; border: 1px solid #283545; background: #0b121b; }
+.stage-shell {
+  margin: 18px 20px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #283545;
+  background: #0b121b;
+  scrollbar-width: thin;
+  scrollbar-color: #5a7883 #14212d;
+}
+.stage-shell.has-image {
+  height: clamp(300px, 62vh, 680px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.stage-shell.is-panning,
+.stage-shell.is-panning * { cursor: grabbing !important; }
 .empty-state { min-height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 24px; text-align: center; border: 1px dashed #354657; border-radius: 12px; margin: 5px; }
 .empty-art {
   width: 178px; height: 136px; position: relative; overflow: hidden; margin: 0 0 25px;
@@ -130,7 +145,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .empty-state h2 { margin: 0 0 9px; letter-spacing: -.6px; font-size: 22px; }
 .empty-state p { color: var(--muted); margin: 0 0 19px; max-width: 400px; font-size: 13px; }
 .empty-actions { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
-.stage { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: #090e16; width: 100%; }
+.stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #090e16;
+  width: 100%;
+  max-width: none;
+  margin: 0 auto;
+  cursor: crosshair;
+}
 .stage canvas { position: absolute; width: 100%; height: 100%; inset: 0; display: block; }
 #originalCanvas, #correctedCanvas { object-fit: fill; }
 #correctedCanvas { clip-path: inset(0 0 0 50%); }
@@ -211,7 +235,55 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   color: var(--accent);
 }
 
-.compare-controls { display: flex; align-items: center; gap: 14px; padding: 17px 20px 13px; }
+.view-toolbar {
+  padding: 12px 20px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 8px;
+}
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+.zoom-title {
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .9px;
+  margin-right: 5px;
+}
+.zoom-controls input[type=range] {
+  accent-color: var(--accent);
+  width: clamp(70px, 12vw, 135px);
+}
+.zoom-controls .button {
+  min-height: 32px;
+  padding: 5px 9px;
+}
+.zoom-controls .zoom-step {
+  width: 30px;
+  font-size: 16px;
+  padding: 4px;
+}
+#zoomReadout {
+  color: var(--accent);
+  font: 700 12px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  min-width: 62px;
+  text-align: center;
+}
+#panButton[aria-pressed=true] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: #173c35;
+}
+.view-tip { color: var(--dim); font-size: 10px; }
+.compare-controls { display: flex; align-items: center; gap: 14px; padding: 12px 20px 13px; }
 .compare-controls label { font-size: 12px; color: var(--muted); font-weight: 650; white-space: nowrap; }
 .mid-label { color: var(--accent); font-size: 17px; margin: 0 6px; }
 .compare-controls input { flex: 1; min-width: 50px; accent-color: var(--accent); }
@@ -274,6 +346,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   .page { padding-left: 20px; padding-right: 20px; }
   .editor-toolbar { padding: 14px; }
   .stage-shell { margin: 14px 14px 0; }
+  .view-toolbar { padding: 10px 14px; }
   .desktop-note { margin-left: 14px; margin-right: 14px; }
 }
 @media (max-width: 880px) {
@@ -296,6 +369,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   .toolbar-group { width: 100%; }
   .toolbar-group .button { flex: 1; }
   .compare-controls { padding: 13px 14px; gap: 7px; }
+  .stage-shell.has-image { height: clamp(260px, 54vh, 510px); }
+  .view-tip { width: 100%; }
   .compare-controls label { font-size: 10px; }
   .mid-label { margin: 0 2px; }
   .desktop-note { flex-direction: column; align-items: flex-start; gap: 8px; }
