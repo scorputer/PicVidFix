@@ -17,6 +17,72 @@ import cv2
 from PIL import Image, ImageTk
 
 
+def rectangle_from_corners(
+    first: tuple[int, int],
+    second: tuple[int, int],
+    image_width: int,
+    image_height: int,
+) -> tuple[int, int, int, int]:
+    """Return a clamped half-open ROI (left, top, width, height).
+
+    Both endpoint pixels are included. This representation is convenient for
+    direct NumPy slicing: image[y:y + height, x:x + width].
+    """
+    if image_width <= 0 or image_height <= 0:
+        raise ValueError("Image dimensions must be positive.")
+
+    ax = min(max(int(first[0]), 0), image_width - 1)
+    ay = min(max(int(first[1]), 0), image_height - 1)
+    bx = min(max(int(second[0]), 0), image_width - 1)
+    by = min(max(int(second[1]), 0), image_height - 1)
+    return (
+        min(ax, bx),
+        min(ay, by),
+        abs(bx - ax) + 1,
+        abs(by - ay) + 1,
+    )
+
+
+def region_metadata(
+    box: tuple[int, int, int, int],
+    image_width: int,
+    image_height: int,
+    filename: str,
+    frame_index: int | None = None,
+) -> dict:
+    """Build reusable, versioned ROI metadata for later analysis."""
+    x, y, width, height = box
+    if not (0 <= x < image_width and 0 <= y < image_height
+            and width > 0 and height > 0
+            and x + width <= image_width
+            and y + height <= image_height):
+        raise ValueError("Region must fit inside the image.")
+
+    image = {
+        "filename": filename,
+        "width": image_width,
+        "height": image_height,
+    }
+    if frame_index is not None:
+        image["frame_index"] = frame_index
+
+    return {
+        "schema": "picvidfix-region-v1",
+        "image": image,
+        "coordinateSystem": "zero-based output pixels; x2/y2 exclusive",
+        "region": {
+            "x": x, "y": y, "width": width, "height": height,
+            "x2": x + width, "y2": y + height,
+        },
+        "normalized": {
+            "x": x / image_width,
+            "y": y / image_height,
+            "width": width / image_width,
+            "height": height / image_height,
+        },
+    }
+
+
 class RegionInspector:
     """Zoom, pan, inspect pixels, and annotate one image rectangle."""
 
@@ -318,9 +384,8 @@ class RegionInspector:
             return
         bx, by = self._image_point(event.x, event.y)
         ax, ay = self.drag_start
-        self.box = (
-            min(ax, bx), min(ay, by),
-            abs(bx - ax) + 1, abs(by - ay) + 1
+        self.box = rectangle_from_corners(
+            (ax, ay), (bx, by), self.image_width, self.image_height
         )
         self._show_region()
         self._draw_box()
@@ -348,7 +413,6 @@ class RegionInspector:
         if self.box is None:
             self.mode_text.set("Draw a box before exporting JSON.")
             return
-        x, y, width, height = self.box
         filename = Path(self.filename).stem + "_region.json"
         target = filedialog.asksaveasfilename(
             parent=self.window, title="Export region coordinates",
@@ -357,27 +421,10 @@ class RegionInspector:
         )
         if not target:
             return
-        metadata = {
-            "schema": "picvidfix-region-v1",
-            "image": {
-                "filename": self.filename,
-                "width": self.image_width,
-                "height": self.image_height,
-            },
-            "coordinateSystem": "zero-based output pixels; x2/y2 exclusive",
-            "region": {
-                "x": x, "y": y, "width": width, "height": height,
-                "x2": x + width, "y2": y + height,
-            },
-            "normalized": {
-                "x": x / self.image_width,
-                "y": y / self.image_height,
-                "width": width / self.image_width,
-                "height": height / self.image_height,
-            },
-        }
-        if self.frame_index is not None:
-            metadata["image"]["frame_index"] = self.frame_index
+        metadata = region_metadata(
+            self.box, self.image_width, self.image_height,
+            self.filename, self.frame_index
+        )
         Path(target).write_text(
             json.dumps(metadata, indent=2), encoding="utf-8"
         )
