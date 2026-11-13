@@ -467,6 +467,222 @@ function installGradientDrag() {
 }
 
 /**
+ * A zoom value of 1 means that one source/output image pixel occupies
+ * approximately one CSS pixel on screen. A null zoomScale means Fit.
+ */
+function currentZoomScale() {
+  if (!state.bitmap) return null;
+  const shell = elements.stageShell;
+  const fit = fitZoom(
+    state.width, state.height, shell.clientWidth, shell.clientHeight
+  );
+  return state.zoomScale ?? fit;
+}
+
+function zoomAnchorCenter() {
+  const rect = elements.stageShell.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+function updateZoomDisplay(anchor = null) {
+  if (!state.bitmap) return;
+  const shell = elements.stageShell;
+  const scale = currentZoomScale();
+  const dimensions = zoomDimensions(state.width, state.height, scale);
+  if (!scale || !dimensions) return;
+  const before = elements.stage.getBoundingClientRect();
+  const point = anchor ?? zoomAnchorCenter();
+
+  elements.stage.style.maxWidth = "none";
+  elements.stage.style.width = dimensions.width + "px";
+  elements.stage.style.height = dimensions.height + "px";
+  elements.stage.style.aspectRatio = state.width + " / " + state.height;
+
+  const after = elements.stage.getBoundingClientRect();
+  const movement = anchoredScrollDelta(
+    before, after, point.x, point.y
+  );
+  if (movement && before.width > 0 && before.height > 0) {
+    shell.scrollLeft += movement.x;
+    shell.scrollTop += movement.y;
+  }
+
+  const percentage = Math.round(scale * 100);
+  elements.zoomSlider.value = String(Math.max(5, Math.min(400, percentage)));
+  elements.zoomReadout.textContent = state.zoomScale === null
+    ? "Fit · " + percentage + "%"
+    : percentage + "%";
+  elements.zoomFit.setAttribute("aria-pressed", String(state.zoomScale === null));
+  elements.zoom100.setAttribute("aria-pressed", String(Math.abs(scale - 1) < 0.001));
+}
+
+/**
+ * Higher zoom levels receive a sharper preview. Limit the number of pixels
+ * handed to the correction worker so high-resolution photos stay responsive.
+ * Export always uses full source resolution regardless of this display cap.
+ */
+function queueZoomPreview() {
+  if (!state.bitmap) return;
+  clearTimeout(state.previewResizeTimer);
+  state.previewResizeTimer = setTimeout(refreshZoomPreview, 240);
+}
+
+function refreshZoomPreview() {
+  if (!state.bitmap || state.selectingPatch || state.panOrigin) return;
+
+  const width = state.width;
+  const height = state.height;
+  const base = Math.min(1, 1150 / width, 820 / height);
+  const previewCap = Math.min(1, Math.sqrt(4_000_000 / (width * height)));
+  const scale = Math.max(base, Math.min(previewCap, currentZoomScale() ?? base));
+  const previewWidth = Math.max(1, Math.round(width * scale));
+  const previewHeight = Math.max(1, Math.round(height * scale));
+
+  if (previewWidth === state.previewWidth
+      && previewHeight === state.previewHeight) return;
+
+  // Avoid repeated resampling and worker jobs for tiny slider changes.
+  const change = Math.abs(previewWidth - state.previewWidth)
+    / Math.max(1, state.previewWidth);
+  if (change < 0.08) return;
+
+  state.previewWidth = previewWidth;
+  state.previewHeight = previewHeight;
+  for (const canvas of [
+    elements.original, elements.corrected,
+    elements.selection, elements.gradientOverlay
+  ]) {
+    canvas.width = previewWidth;
+    canvas.height = previewHeight;
+  }
+
+  const originalContext = elements.original.getContext(
+    "2d", { willReadFrequently: true }
+  );
+  originalContext.drawImage(state.bitmap, 0, 0, previewWidth, previewHeight);
+  state.sourcePreview = originalContext.getImageData(
+    0, 0, previewWidth, previewHeight
+  ).data;
+  state.displayBefore = state.sourcePreview;
+  elements.corrected.getContext("2d").drawImage(elements.original, 0, 0);
+  updateGradientOverlay();
+  schedulePreview();
+}
+
+function setZoom(scale, anchor = null) {
+  if (!state.bitmap) return;
+  const valid = clampZoom(scale);
+  if (valid === null) return;
+  state.zoomScale = valid;
+  updateZoomDisplay(anchor);
+  queueZoomPreview();
+}
+
+function setPanMode(value) {
+  state.panMode = Boolean(value);
+  elements.panButton.setAttribute("aria-pressed", String(state.panMode));
+  if (!state.panMode && !state.spaceHeld && !state.panOrigin) {
+    elements.stageShell.classList.remove("is-panning");
+  }
+}
+
+function installZoomEvents() {
+  elements.zoomFit.addEventListener("click", () => {
+    state.zoomScale = null;
+    updateZoomDisplay();
+    queueZoomPreview();
+  });
+  elements.zoom100.addEventListener("click", () => {
+    setZoom(1, zoomAnchorCenter());
+  });
+  elements.zoomIn.addEventListener("click", () => {
+    setZoom((currentZoomScale() ?? 1) * 1.35, zoomAnchorCenter());
+  });
+  elements.zoomOut.addEventListener("click", () => {
+    setZoom((currentZoomScale() ?? 1) / 1.35, zoomAnchorCenter());
+  });
+  elements.zoomSlider.addEventListener("input", (event) => {
+    setZoom(Number(event.target.value) / 100, zoomAnchorCenter());
+  });
+  elements.panButton.addEventListener("click", () => {
+    setPanMode(!state.panMode);
+  });
+  elements.stageShell.addEventListener("wheel", (event) => {
+    if (!state.bitmap || (!event.ctrlKey && !event.metaKey)) return;
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.2 : 1 / 1.2;
+    setZoom((currentZoomScale() ?? 1) * factor, {
+      x: event.clientX, y: event.clientY
+    });
+  }, { passive: false });
+
+  elements.stage.addEventListener("pointerdown", (event) => {
+    const shouldPan = state.panMode || state.spaceHeld || event.button === 1;
+    if (!shouldPan || state.selectingPatch) return;
+    if (event.button !== 0 && event.button !== 1) return;
+
+    // Capture before gradient handles can intercept the drag.
+    event.preventDefault();
+    event.stopPropagation();
+    state.panOrigin = {
+      x: event.clientX,
+      y: event.clientY,
+      left: elements.stageShell.scrollLeft,
+      top: elements.stageShell.scrollTop
+    };
+    elements.stage.setPointerCapture(event.pointerId);
+    elements.stageShell.classList.add("is-panning");
+    showPixelCoordinates(event);
+  }, { capture: true });
+
+  elements.stage.addEventListener("pointermove", (event) => {
+    if (!state.panOrigin) return;
+    const origin = state.panOrigin;
+    elements.stageShell.scrollLeft = origin.left + origin.x - event.clientX;
+    elements.stageShell.scrollTop = origin.top + origin.y - event.clientY;
+  });
+  const finishPan = () => {
+    if (!state.panOrigin) return;
+    state.panOrigin = null;
+    if (!state.panMode && !state.spaceHeld) {
+      elements.stageShell.classList.remove("is-panning");
+    }
+    queueZoomPreview();
+  };
+  elements.stage.addEventListener("pointerup", finishPan);
+  elements.stage.addEventListener("pointercancel", finishPan);
+  elements.stage.addEventListener("lostpointercapture", finishPan);
+
+  const editingText = (target) => target instanceof HTMLElement
+    && (target.matches("input,textarea,select,button")
+      || target.isContentEditable);
+  window.addEventListener("keydown", (event) => {
+    if (event.code !== "Space" || editingText(event.target)) return;
+    state.spaceHeld = true;
+    if (state.bitmap) elements.stageShell.classList.add("is-panning");
+    event.preventDefault();
+  });
+  window.addEventListener("keyup", (event) => {
+    if (event.code !== "Space") return;
+    state.spaceHeld = false;
+    if (!state.panMode && !state.panOrigin) {
+      elements.stageShell.classList.remove("is-panning");
+    }
+  });
+  window.addEventListener("blur", () => {
+    state.spaceHeld = false;
+    if (!state.panMode && !state.panOrigin) {
+      elements.stageShell.classList.remove("is-panning");
+    }
+  });
+  window.addEventListener("resize", () => {
+    if (!state.bitmap) return;
+    updateZoomDisplay();
+    queueZoomPreview();
+  });
+}
+
+/**
  * Report full-resolution export-canvas coordinates, not CSS or preview pixels.
  * Geometry keeps canvas dimensions unchanged, so the same X/Y positions
  * apply to the aligned before/after comparison and draggable gradient mask.
@@ -1034,6 +1250,7 @@ buildControls();
 buildSpatialControls();
 installEvents();
 installSpatialEvents();
+installZoomEvents();
 installPatchSelection();
 updateSplit();
 syncAllControls();
