@@ -728,6 +728,203 @@ function clearPixelCoordinates() {
   elements.pixelHud.hidden = !state.bitmap;
 }
 
+/**
+ * Region boxes are annotations, never edits to the image bitmap.
+ *
+ * Coordinates remain in full-resolution OUTPUT-image pixels even as zoom,
+ * pan, or the preview processing resolution changes.
+ */
+function drawRegionBox() {
+  const canvas = elements.regionOverlay;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  canvas.hidden = !state.bitmap || (!state.regionMode && !state.regionBox);
+  canvas.classList.toggle("region-editing", state.regionMode);
+  if (!state.regionBox || !state.bitmap) return;
+
+  const box = state.regionBox;
+  const scaleX = canvas.width / state.width;
+  const scaleY = canvas.height / state.height;
+  const x = box.x * scaleX;
+  const y = box.y * scaleY;
+  const width = box.width * scaleX;
+  const height = box.height * scaleY;
+  // The line should remain visible and roughly 2 CSS pixels wide at all
+  // zoom factors. The DOM canvas is scaled to match the zoomed image.
+  const cssWidth = Math.max(1, canvas.getBoundingClientRect().width);
+  const cssHeight = Math.max(1, canvas.getBoundingClientRect().height);
+  const lineWidth = Math.max(0.3, 2 * canvas.width / cssWidth);
+  const handleRadius = Math.max(1, 5 * canvas.width / cssWidth);
+
+  ctx.save();
+  ctx.fillStyle = "rgba(134, 234, 195, 0.12)";
+  ctx.fillRect(x, y, width, height);
+  ctx.strokeStyle = "#101822";
+  ctx.lineWidth = lineWidth * 2.4;
+  ctx.strokeRect(x, y, width, height);
+  ctx.strokeStyle = "#91ffe1";
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(x, y, width, height);
+  ctx.fillStyle = "#91ffe1";
+  ctx.strokeStyle = "#102321";
+  ctx.lineWidth = Math.max(0.5, lineWidth / 2);
+  for (const [cornerX, cornerY] of [
+    [x, y], [x + width, y], [x + width, y + height], [x, y + height]
+  ]) {
+    ctx.beginPath();
+    // Make handles circular in display-space, including non-square sizing.
+    ctx.ellipse(
+      cornerX, cornerY, handleRadius,
+      Math.max(1, 5 * canvas.height / cssHeight), 0,
+      0, Math.PI * 2
+    );
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function updateRegionUI() {
+  elements.regionSelect.setAttribute(
+    "aria-pressed", String(state.regionMode)
+  );
+  elements.regionSelect.textContent = state.regionMode
+    ? "Finish drawing" : "Draw box";
+  elements.regionClear.disabled = !state.regionBox;
+  elements.regionExport.disabled = !state.regionBox;
+  elements.regionReadout.textContent = formatRectangle(state.regionBox);
+  drawRegionBox();
+}
+
+function setRegionMode(enabled) {
+  if (enabled && !state.bitmap) {
+    status("Open an image before drawing a bounding box.", true);
+    return;
+  }
+  if (enabled && state.selectingPatch) setPatchSelection(false);
+  state.regionMode = enabled;
+  if (!enabled) state.regionDragStart = null;
+  updateRegionUI();
+  updateGradientOverlay();
+
+  if (enabled) {
+    status("Drag from one corner of the region to the opposite corner. Hold Space to pan.");
+  }
+}
+
+function imagePixelForRegionPointer(event) {
+  const bounds = elements.stage.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) return null;
+  const clampedX = Math.max(bounds.left, Math.min(
+    bounds.right - 0.0001, event.clientX
+  ));
+  const clampedY = Math.max(bounds.top, Math.min(
+    bounds.bottom - 0.0001, event.clientY
+  ));
+  return pixelAtPointer(
+    clampedX, clampedY, bounds, state.width, state.height
+  );
+}
+
+function installRegionEvents() {
+  const canvas = elements.regionOverlay;
+  let oldBox = null;
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (!state.regionMode || event.button !== 0 || state.spaceHeld
+        || state.panMode || state.panOrigin) return;
+    const point = imagePixelForRegionPointer(event);
+    if (!point) return;
+    event.preventDefault();
+    event.stopPropagation();
+    oldBox = state.regionBox;
+    state.regionDragStart = point;
+    state.regionBox = rectangleFromCorners(
+      point, point, state.width, state.height
+    );
+    canvas.setPointerCapture(event.pointerId);
+    updateRegionUI();
+    showPixelCoordinates(event);
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (!state.regionDragStart) return;
+    const point = imagePixelForRegionPointer(event);
+    if (!point) return;
+    state.regionBox = rectangleFromCorners(
+      state.regionDragStart, point, state.width, state.height
+    );
+    updateRegionUI();
+    showPixelCoordinates(event);
+  });
+
+  canvas.addEventListener("pointerup", (event) => {
+    if (!state.regionDragStart) return;
+    const point = imagePixelForRegionPointer(event);
+    if (point) {
+      state.regionBox = rectangleFromCorners(
+        state.regionDragStart, point, state.width, state.height
+      );
+    }
+    state.regionDragStart = null;
+    oldBox = null;
+    setRegionMode(false);
+    const box = state.regionBox;
+    status("Region selected: " + formatRectangle(box)
+      + ". Export box JSON for analysis or draw another box.");
+    showPixelCoordinates(event);
+  });
+
+  canvas.addEventListener("pointercancel", () => {
+    if (!state.regionDragStart) return;
+    state.regionDragStart = null;
+    state.regionBox = oldBox;
+    oldBox = null;
+    updateRegionUI();
+  });
+
+  elements.regionSelect.addEventListener("click", () => {
+    setRegionMode(!state.regionMode);
+  });
+  elements.regionClear.addEventListener("click", () => {
+    state.regionBox = null;
+    state.regionDragStart = null;
+    setRegionMode(false);
+    status("Region annotation cleared. The photo is unchanged.");
+  });
+  elements.regionExport.addEventListener("click", () => {
+    if (!state.regionBox) return;
+    try {
+      const data = exportRectangle(
+        state.regionBox, state.width, state.height, state.filename
+      );
+      const filename = (state.filename || "image")
+        .replace(/\\.[^.]+$/, "")
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
+      downloadBlob(
+        new Blob([JSON.stringify(data, null, 2)], {
+          type: "application/json"
+        }),
+        filename + "_region.json"
+      );
+      toast("Bounding box coordinates exported as JSON.");
+    } catch (error) {
+      status("Region export failed: " + error.message, true);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !state.regionMode) return;
+    if (state.regionDragStart) {
+      state.regionBox = oldBox;
+      state.regionDragStart = null;
+      oldBox = null;
+    }
+    setRegionMode(false);
+  });
+}
+
 function updateSplit() {
   const value = Number(elements.compareSlider.value);
   elements.corrected.style.clipPath = "inset(0 0 0 " + value + "%)";
@@ -1275,6 +1472,7 @@ installEvents();
 installSpatialEvents();
 installZoomEvents();
 installPatchSelection();
+installRegionEvents();
 updateSplit();
 syncAllControls();
 status("Ready. Pick a photo or try the demo. No uploads are performed.");
