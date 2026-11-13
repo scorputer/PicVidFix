@@ -26,6 +26,11 @@ import {
   zoomDimensions,
   anchoredScrollDelta
 } from "./viewport-zoom.js";
+import {
+  rectangleFromCorners,
+  formatRectangle,
+  exportRectangle
+} from "./region-box.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -35,6 +40,12 @@ const elements = {
   corrected: $("correctedCanvas"),
   selection: $("selectionCanvas"),
   gradientOverlay: $("gradientCanvas"),
+  regionOverlay: $("regionCanvas"),
+  regionToolbar: $("regionToolbar"),
+  regionSelect: $("regionSelect"),
+  regionClear: $("regionClear"),
+  regionExport: $("regionExport"),
+  regionReadout: $("regionReadout"),
   stage: $("stage"),
   stageShell: $("stageShell"),
   viewToolbar: $("viewToolbar"),
@@ -81,6 +92,9 @@ const state = {
   previewJobId: 0,
   busyExporting: false,
   selectingPatch: false,
+  regionMode: false,
+  regionBox: null,
+  regionDragStart: null,
   zoomScale: null,  // null means fit-to-window, otherwise CSS pixels per image pixel
   spaceHeld: false,
   panMode: false,
@@ -358,7 +372,8 @@ function resetGradient() {
 function updateGradientOverlay() {
   const canvas = elements.gradientOverlay;
   const visible = Boolean(state.sourcePreview && state.spatial.gradient_enabled
-    && state.showGradientHandles && !state.selectingPatch);
+    && state.showGradientHandles && !state.selectingPatch
+    && !state.regionMode);
   canvas.hidden = !visible;
   if (!visible) return;
   const ctx = canvas.getContext("2d");
@@ -550,7 +565,7 @@ function refreshZoomPreview() {
   state.previewHeight = previewHeight;
   for (const canvas of [
     elements.original, elements.corrected,
-    elements.selection, elements.gradientOverlay
+    elements.selection, elements.gradientOverlay, elements.regionOverlay
   ]) {
     canvas.width = previewWidth;
     canvas.height = previewHeight;
@@ -566,6 +581,7 @@ function refreshZoomPreview() {
   state.displayBefore = state.sourcePreview;
   elements.corrected.getContext("2d").drawImage(elements.original, 0, 0);
   updateGradientOverlay();
+  drawRegionBox();
   schedulePreview();
 }
 
@@ -816,7 +832,8 @@ function loadBitmap(bitmap, filename) {
   state.previewHeight = previewHeight;
 
   for (const canvas of [
-    elements.original, elements.corrected, elements.selection, elements.gradientOverlay
+    elements.original, elements.corrected, elements.selection,
+    elements.gradientOverlay, elements.regionOverlay
   ]) {
     canvas.width = previewWidth;
     canvas.height = previewHeight;
@@ -832,8 +849,13 @@ function loadBitmap(bitmap, filename) {
   );
 
   state.selectingPatch = false;
+  state.regionBox = null;
+  state.regionDragStart = null;
+  state.regionMode = false;
   elements.selection.hidden = true;
   elements.sample.textContent = "Select neutral patch";
+  elements.regionToolbar.hidden = false;
+  updateRegionUI();
   updateGradientOverlay();
 
   elements.stage.hidden = false;
@@ -999,6 +1021,7 @@ async function loadPreset(file) {
 }
 
 function setPatchSelection(enabled) {
+  if (enabled && state.regionMode) setRegionMode(false);
   state.selectingPatch = enabled;
   elements.selection.hidden = !enabled;
   elements.sample.textContent = enabled ? "Cancel selection" : "Select neutral patch";
