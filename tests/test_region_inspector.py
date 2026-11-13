@@ -2,7 +2,12 @@
 
 import unittest
 
-from region_inspector import rectangle_from_corners, region_metadata
+from region_inspector import (
+    box_corners,
+    format_box_corners,
+    rectangle_from_corners,
+    region_metadata,
+)
 
 
 class RegionInspectorMathTests(unittest.TestCase):
@@ -39,6 +44,32 @@ class RegionInspectorMathTests(unittest.TestCase):
     def test_video_metadata_retains_frame_number(self):
         data = region_metadata((1, 2, 3, 4), 100, 100, "video.mp4", 17)
         self.assertEqual(data["image"]["frame_index"], 17)
+
+    def test_corners_for_reversed_drag(self):
+        box = rectangle_from_corners(
+            (1200, 900), (800, 400), 5000, 3500
+        )
+        self.assertEqual(
+            box_corners(box),
+            {
+                "top_left": (800, 400),
+                "top_right": (1200, 400),
+                "bottom_left": (800, 900),
+                "bottom_right": (1200, 900),
+            },
+        )
+        self.assertEqual(
+            format_box_corners(box),
+            "TL (800, 400)   TR (1200, 400)   "
+            "BL (800, 900)   BR (1200, 900)",
+        )
+
+    def test_corner_labels_single_pixel_and_empty(self):
+        one_pixel = box_corners((3, 4, 1, 1))
+        self.assertEqual(set(one_pixel.values()), {(3, 4)})
+        self.assertIn("draw a box", format_box_corners(None))
+        with self.assertRaises(ValueError):
+            box_corners((3, 4, 0, 10))
 
     def test_invalid_region_rejected(self):
         with self.assertRaises(ValueError):
