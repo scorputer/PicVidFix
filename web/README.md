@@ -1,4 +1,4 @@
-# PicVidFix Web v0.2.1
+# PicVidFix Web v0.3.1
 
 A free static photo editor that performs processing locally in the browser.
 Deploy to Cloudflare Pages, GitHub Pages, or any static HTTP server. It uses no
@@ -10,6 +10,8 @@ server uploads, paid image-processing API, package installation, or cloud jobs.
 - Precise numeric inputs and sliders for exposure, tone, color and sharpness
 - Split before/after comparison
 - Live X/Y pixel coordinates on image hover or touch, scaled to full image resolution
+- **Zoom:** Fit, 100%, zoom buttons, slider, Ctrl + wheel; scroll or pan images
+- **Bounding box:** draw one persistent rectangle, view X/Y/W/H and export JSON
 - White-balance calibration from a neutral patch
 - Selective blue replacement
 - **Geometry:** straighten/rotate, vertical/horizontal perspective, flip
@@ -43,6 +45,40 @@ coordinates to preserve their positions when exporting at original resolution.
 This release supports **one gradient at a time**, not brush masks, segmentation
 or multiple combined masks. Geometry and color adjustments are non-destructive
 until export. No AI subject-tracking or video editing exists in the browser yet.
+
+## Zoom, pan, and large images
+
+The browser accepts images up to 24 megapixels and input files up to 75 MB
+(subject to available device memory). A 5000 × 3500 photo is under the pixel
+limit. Use **Fit** to view the whole image, **100%** to inspect source-sized
+pixels, or the zoom slider and +/- buttons for intermediate magnification.
+The editor adds scrollbars when the image exceeds the viewport; you can also
+activate **Pan** or hold Space while dragging. Ctrl + mouse wheel zooms around
+the pointer. These operations change *only* the preview viewport and never
+downsample or overwrite the original file.
+
+For speed, extremely high zoom levels can display an upscaled preview rather
+than reading every full-resolution pixel. Export remains original resolution.
+
+## Select an analysis bounding box
+
+Click **Draw box**, then drag from one image corner to the opposite corner.
+The rectangle remains visible while editing, changing zoom, or panning.
+Click **Draw box** again to replace it with another rectangle. Use
+**Clear box** to remove it. **Export box JSON** downloads the rectangle
+coordinates together with the original image dimensions, filename, and
+normalized coordinates.
+
+The readout uses **X/Y** for the top-left position and **W/H** for the width
+and height. Coordinates are zero-based on the *output* image canvas after
+geometry correction. JSON uses half-open bounds: `x2 = x + width`,
+`y2 = y + height`. A 1-pixel rectangle has width and height 1.
+The overlay is **not** burned into the corrected PNG.
+
+The region is an analysis annotation, not an additional exposure mask yet.
+Creating a box temporarily gives it pointer priority over gradient handles
+and white-balance selection; normal tools become available again when
+drawing mode is finished. Your next image starts with no selected box.
 
 ## Pixel position readout
 
@@ -111,6 +147,7 @@ provider still serves static website assets.
 
 ## Future improvements
 
+- Promote an analysis ROI to a reusable exposure, color or tracking mask
 - Luminance masks for highlights, shadows, and subject protection
 - Multiple editable masks with blend/combination modes
 - Edge-aware masking, semantic subject segmentation
