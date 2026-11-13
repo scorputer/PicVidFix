@@ -551,7 +551,7 @@ class VideoColorApp:
         )
         self.cancel_button.pack(side="left")
         ttk.Button(
-            header, text="Inspect / Draw box", command=self._inspect_region
+            header, text="Zoom / Inspect / Box", command=self._inspect_region
         ).pack(side="left", padx=(10, 0))
 
         main = ttk.Frame(outer)
@@ -584,6 +584,9 @@ class VideoColorApp:
             label.bind(
                 "<Leave>", lambda _event: self.pixel_position.set("X: —  Y: —")
             )
+            # The two main previews remain fit-to-window; double-click
+            # opens the native-resolution zoom/pan inspector.
+            label.bind("<Double-Button-1>", lambda _event: self._inspect_region())
 
         player = ttk.Frame(preview_area)
         player.pack(fill="x", pady=(10, 0))
@@ -1249,7 +1252,8 @@ class VideoColorApp:
         else:
             x, y, width, height = box
             self.status.set(
-                f"Region selected: X={x}, Y={y}, W={width}, H={height}"
+                f"Region: TL=({x},{y}), BR=({x + width - 1},{y + height - 1}) "
+                f"| {width} × {height} px"
             )
         self._schedule_preview()
 
