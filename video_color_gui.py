@@ -999,6 +999,7 @@ class VideoColorApp:
             self.auto_pending_key = None
             self.auto_info.set("Off. Manual exposure only.")
         self.ring_enabled.set(False)
+        self.ring_show_guide.set(True)
         for name, _, _, _, default in RING_SPECS:
             self.ring_values[name].set(default)
             self.ring_numeric[name].set(f"{default:g}")
