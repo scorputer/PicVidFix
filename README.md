@@ -53,15 +53,18 @@ MP4 export requires a separate FFmpeg installation with `ffmpeg.exe` on PATH.
 The desktop **Color references...** panel now shows source and selected
 reference side by side. When either pane displays video, it has a frame slider,
 an exact numeric frame-index field, and visible zero-based frame numbering.
-Both panes navigate independently, and the main source/corrected preview
-panels also show their current video frame number.
+Both panes navigate independently; the **Refresh source** button reloads the
+main editor's latest selected source frame if it changed while the comparison
+panel was open. The main source/corrected previews also show their current
+video frame number.
 
 The **Virtual ring light / anti-hotspot** controls add a signed, feathered
 radial EV correction to either image or video: positive values add central
 fill light, negative values reduce central glare. Position, radius and
 feather are adjustable. **Estimate center-to-edge lighting** suggests an EV
 using medians from the source frame, but content can bias that meter; verify
-the preview. Highlight protection reduces additional brightening of near-white
+the preview. **Show ring guide in preview only** marks its center and radius
+without writing the guide into saved media. Highlight protection reduces additional brightening of near-white
 areas but cannot recover previously clipped data. This ring effect is part
 of the common Python image processing pipeline, so preview, still save and
 video export use it consistently. Ring settings are included in presets.
