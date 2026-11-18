@@ -8,7 +8,7 @@ original Python `HueSatVal3.py` engine.
 | Edition | Status | How to run |
 | --- | --- | --- |
 | **Web v0.3.2** | Browser-based photo editor with zoom/pan and analysis ROIs (no server uploads) | Open `web/` through a static HTTP server, or deploy it to Cloudflare Pages |
-| **Desktop v1.5.1** | Python image/video editor with dynamic subject-region exposure and region inspector | `py video_color_gui.py` |
+| **Desktop v1.5.2** | Python image/video editor with dynamic subject-region exposure and region inspector | `py video_color_gui.py` |
 | **Standalone v1.5** | Same desktop app in a single Python file | `py HueSatVal_v1_5_standalone.py` |
 
 ## Web quick start
