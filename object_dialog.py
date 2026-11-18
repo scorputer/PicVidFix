@@ -107,7 +107,10 @@ class ObjectSelectionDialog:
         self.window.protocol("WM_DELETE_WINDOW", self.close)
         # Keep the source frame stable while a mask is being drawn.
         # This prevents attaching an old object's mask to a new image/frame.
-        self.window.grab_set()
+        self.window.after_idle(
+            lambda: self.window.grab_set()
+            if self.window.winfo_exists() else None
+        )
 
         top = ttk.Frame(self.window, padding=9)
         top.pack(fill="x")
