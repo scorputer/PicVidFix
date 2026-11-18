@@ -278,6 +278,8 @@ class ObjectSelectionDialog:
 
     def _drag(self, event) -> None:
         self._move(event)
+        if self.busy:
+            return
         if self.pan_origin is not None:
             x, y, old_x, old_y = self.pan_origin
             self.offset_x = old_x + event.x - x
