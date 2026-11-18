@@ -24,6 +24,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
 import cv2
+import numpy as np
 from PIL import Image, ImageTk
 
 from region_inspector import RegionInspector
@@ -46,6 +47,13 @@ from color_pipeline import (
 
 
 # Name, minimum, maximum, neutral/default value, slider precision.
+OBJECT_SPECS = (
+    ("exposure_ev", "Object exposure (EV)", -3.0, 3.0, 0.0),
+    ("saturation", "Object saturation", 0.0, 3.0, 1.0),
+    ("strength", "Mask strength", 0.0, 1.0, 1.0),
+    ("feather_px", "Edge feather (pixels)", 0.0, 100.0, 4.0),
+)
+
 RING_SPECS = (
     ("ring_ev", "Center correction (EV)", -3.0, 3.0, 0.0),
     ("ring_center_x", "Horizontal position", 0.0, 1.0, 0.5),
@@ -515,6 +523,23 @@ class VideoColorApp:
         )
         # Region inspection is an annotation, independent of color settings.
         self.region_box: tuple[int, int, int, int] | None = None
+        self.object_mask: np.ndarray | None = None
+        self.object_mask_frame: int | None = None
+        self.object_dialog: ObjectSelectionDialog | None = None
+        self.object_enabled = tk.BooleanVar(value=False)
+        self.object_fixed_video = tk.BooleanVar(value=False)
+        self.object_show_outline = tk.BooleanVar(value=True)
+        self.object_values = {
+            name: tk.DoubleVar(value=default)
+            for name, _, _, _, default in OBJECT_SPECS
+        }
+        self.object_numeric = {
+            name: tk.StringVar(value=f"{default:g}")
+            for name, _, _, _, default in OBJECT_SPECS
+        }
+        self.object_info = tk.StringVar(
+            value="No object selected. Draw a rough box to begin."
+        )
         self.reference_dialog: ReferenceMatchDialog | None = None
         self.pixel_position = tk.StringVar(value="X: —  Y: —")
         # Subject-priority auto exposure works across successive frames.
@@ -599,6 +624,9 @@ class VideoColorApp:
         ).pack(side="left", padx=(10, 0))
         ttk.Button(
             header, text="Color references...", command=self._open_reference_dialog
+        ).pack(side="left", padx=(6, 0))
+        ttk.Button(
+            header, text="Select object...", command=self._select_object
         ).pack(side="left", padx=(6, 0))
 
         main = ttk.Frame(outer)
@@ -730,6 +758,58 @@ class VideoColorApp:
             control_host, textvariable=self.auto_info,
             foreground="#666666", wraplength=330,
         ).pack(fill="x", pady=(5, 5))
+        ttk.Separator(control_host).pack(fill="x", pady=(5, 10))
+        ttk.Label(
+            control_host, text="Object-local corrections",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w", pady=(0, 5))
+        ttk.Button(
+            control_host, text="Select / refine object...",
+            command=self._select_object,
+        ).pack(fill="x", pady=(0, 4))
+        ttk.Checkbutton(
+            control_host, text="Enable selected-object correction",
+            variable=self.object_enabled, command=self._object_changed,
+        ).pack(anchor="w", pady=(0, 3))
+        for name, label, low, high, default in OBJECT_SPECS:
+            line = ttk.Frame(control_host)
+            line.pack(fill="x", pady=1)
+            ttk.Label(line, text=label).pack(anchor="w")
+            editor = ttk.Frame(line)
+            editor.pack(fill="x")
+            ttk.Scale(
+                editor, from_=low, to=high, variable=self.object_values[name],
+                command=lambda _value, key=name: self._object_slider_changed(key),
+            ).pack(side="left", fill="x", expand=True)
+            field = ttk.Entry(
+                editor, textvariable=self.object_numeric[name], width=8
+            )
+            field.pack(side="right", padx=(5, 0))
+            field.bind(
+                "<Return>",
+                lambda _event, key=name: self._object_number_changed(key),
+            )
+            field.bind(
+                "<FocusOut>",
+                lambda _event, key=name: self._object_number_changed(key),
+            )
+        ttk.Checkbutton(
+            control_host, text="Show object outline (preview only)",
+            variable=self.object_show_outline, command=self._schedule_preview,
+        ).pack(anchor="w", pady=(3, 2))
+        ttk.Checkbutton(
+            control_host,
+            text="Use FIXED mask across video (no motion tracking)",
+            variable=self.object_fixed_video, command=self._object_changed,
+        ).pack(anchor="w", pady=(1, 4))
+        ttk.Button(
+            control_host, text="Clear object selection",
+            command=self._clear_object,
+        ).pack(fill="x", pady=(0, 4))
+        ttk.Label(
+            control_host, textvariable=self.object_info,
+            foreground="#666666", wraplength=330,
+        ).pack(fill="x", pady=(0, 6))
         ttk.Separator(control_host).pack(fill="x", pady=(5, 10))
         ttk.Label(
             control_host, text="Virtual ring light / anti-hotspot",
