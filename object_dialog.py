@@ -105,6 +105,9 @@ class ObjectSelectionDialog:
         self.window.geometry("1140x820")
         self.window.minsize(720, 490)
         self.window.protocol("WM_DELETE_WINDOW", self.close)
+        # Keep the source frame stable while a mask is being drawn.
+        # This prevents attaching an old object's mask to a new image/frame.
+        self.window.grab_set()
 
         top = ttk.Frame(self.window, padding=9)
         top.pack(fill="x")
@@ -418,4 +421,6 @@ class ObjectSelectionDialog:
         if self.render_job is not None:
             self.window.after_cancel(self.render_job)
             self.render_job = None
+        if self.window.grab_current() == self.window:
+            self.window.grab_release()
         self.window.destroy()
