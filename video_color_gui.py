@@ -556,6 +556,9 @@ class VideoColorApp:
         ttk.Button(
             header, text="Zoom / Inspect / Box", command=self._inspect_region
         ).pack(side="left", padx=(10, 0))
+        ttk.Button(
+            header, text="Color references...", command=self._open_reference_dialog
+        ).pack(side="left", padx=(6, 0))
 
         main = ttk.Frame(outer)
         main.pack(fill="both", expand=True)
