@@ -8,7 +8,7 @@ original Python `HueSatVal3.py` engine.
 | Edition | Status | How to run |
 | --- | --- | --- |
 | **Web v0.3.2** | Browser-based photo editor with zoom/pan and analysis ROIs (no server uploads) | Open `web/` through a static HTTP server, or deploy it to Cloudflare Pages |
-| **Desktop v1.5.2** | Python image/video editor with dynamic subject-region exposure and region inspector | `py video_color_gui.py` |
+| **Desktop v1.6** | Python image/video editor with dynamic subject-region exposure and region inspector | `py video_color_gui.py` |
 | **Standalone v1.5** | Same desktop app in a single Python file | `py HueSatVal_v1_5_standalone.py` |
 
 ## Web quick start
@@ -50,6 +50,22 @@ py video_color_gui.py
 
 MP4 export requires a separate FFmpeg installation with `ffmpeg.exe` on PATH.
 
+The desktop **Color references...** panel now shows source and selected
+reference side by side. When either pane displays video, it has a frame slider,
+an exact numeric frame-index field, and visible zero-based frame numbering.
+Both panes navigate independently, and the main source/corrected preview
+panels also show their current video frame number.
+
+The **Virtual ring light / anti-hotspot** controls add a signed, feathered
+radial EV correction to either image or video: positive values add central
+fill light, negative values reduce central glare. Position, radius and
+feather are adjustable. **Estimate center-to-edge lighting** suggests an EV
+using medians from the source frame, but content can bias that meter; verify
+the preview. Highlight protection reduces additional brightening of near-white
+areas but cannot recover previously clipped data. This ring effect is part
+of the common Python image processing pipeline, so preview, still save and
+video export use it consistently. Ring settings are included in presets.
+
 The desktop **Compare photos / video frames...** panel accepts multiple
 reference photos and individual video frames. It uses ORB feature matching
 and RANSAC to detect overlapping content, estimates consensus exposure and
@@ -76,6 +92,8 @@ are outside its current scope.
 - `region_inspector.py`: Dedicated desktop zoom/pan and ROI annotation tool
 - `reference_match.py`: Robust overlap detection and multi-reference EV/color comparisons
 - `reference_dialog.py`: Desktop panel to collect photos/frames and review regional suggestions
+- `reference_preview.py`: Side-by-side image/video previews with frame navigation
+- `light_ring.py`: Radial exposure field and optional center/edge metering
 - `HueSatVal_v1_5_standalone.py`: Historical all-in-one v1.5 desktop version
   (does **not** yet include the new region inspector)
 - `baseline/`: Original unmodified `HueSatVal3.py`
