@@ -594,6 +594,8 @@ class VideoColorApp:
         compare.pack(fill="both", expand=True)
         left = ttk.LabelFrame(compare, text="Original", padding=5)
         right = ttk.LabelFrame(compare, text="Corrected preview", padding=5)
+        self.original_frame_box = left
+        self.corrected_frame_box = right
         left.pack(side="left", fill="both", expand=True, padx=(0, 4))
         right.pack(side="left", fill="both", expand=True, padx=(4, 0))
         self.original_label = ttk.Label(left, text="No media loaded", anchor="center")
@@ -1187,7 +1189,7 @@ class VideoColorApp:
         self.source_frame = frame
         self.region_box = None
         if kind == "image":
-            self.frame_indicator.set("Still image")
+            self._update_time()
         self.current_frame = 0
         if kind == "image":
             if self.capture is not None:
@@ -1298,6 +1300,8 @@ class VideoColorApp:
         if self.media_kind != "video":
             self.timeline_text.set("Image mode")
             self.frame_indicator.set("Still image")
+            self.original_frame_box.configure(text="Original (photo)")
+            self.corrected_frame_box.configure(text="Corrected preview (photo)")
             return
         current = self.current_frame / self.fps
         total = self.frame_count / self.fps if self.frame_count else current
@@ -1309,6 +1313,12 @@ class VideoColorApp:
         self.frame_indicator.set(
             f"Frame {self.current_frame} / {max(0, self.frame_count - 1)} "
             "(0-based)"
+        )
+        self.original_frame_box.configure(
+            text=f"Original | frame {self.current_frame}"
+        )
+        self.corrected_frame_box.configure(
+            text=f"Corrected preview | frame {self.current_frame}"
         )
 
     def _schedule_preview(self) -> None:
