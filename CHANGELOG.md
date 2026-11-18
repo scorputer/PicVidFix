@@ -36,6 +36,7 @@ The original project is based on `HueSatVal3.py` (preserved in `baseline/`). Ver
 | v1.4 | Reset all and per-control reset | Historical GUI and shared pre-v1.5 pipeline |
 | v1.5 | Fixed-region, smoothed subject-priority auto-exposure | Modular and standalone source at root |
 | v1.5.1 | Main-preview X/Y cursor display, zoomable/pannable ROI inspector popup, non-destructive box overlays and JSON export | Current modular desktop GUI + region_inspector.py; standalone remains v1.5 |
+| v1.5.2 | Multi-reference overlap/EV analysis for still images and video frames; optional global suggestion, regional diagnostic heatmap and tests | Current modular desktop GUI + reference_match.py + reference_dialog.py; standalone remains v1.5 |
 
 Historical GUIs are reference snapshots and are **not guaranteed to work** with the current root pipeline. To reproduce a specific historical version, use that version's original ZIP or match it with its contemporaneous dependencies. Video samples, complete original test suite, and original packaged releases have not yet been imported.
 
