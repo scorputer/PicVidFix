@@ -113,7 +113,8 @@ class ReferenceMatchDialog:
         ).pack(anchor="w")
         ttk.Label(
             header,
-            text="Only reliable same-scene overlaps are evaluated. "
+            text="Same-scene matching needs 12+ geometric inliers, "
+            "at least 7% overlap and 500+ usable pixels. "
             "Recommendations do not change the image until approved.",
             wraplength=980,
             foreground="#666666",
