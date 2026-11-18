@@ -160,13 +160,23 @@ class RegionInspector:
         self.initial_fit_done = False
 
         self.window = tk.Toplevel(parent)
-        self.window.title("PicVidFix | Region inspector")
+        self.window.title(
+            "PicVidFix | Region inspector"
+            + (
+                f" | video frame {self.frame_index}"
+                if self.frame_index is not None else ""
+            )
+        )
         self.window.geometry("1080x780")
         self.window.minsize(640, 400)
         self.window.protocol("WM_DELETE_WINDOW", self.window.destroy)
 
         toolbar = ttk.Frame(self.window, padding=8)
         toolbar.pack(side="top", fill="x")
+        if self.frame_index is not None:
+            ttk.Label(
+                toolbar, text=f"Frame {self.frame_index} (0-based)"
+            ).pack(side="right", padx=(8, 0))
         ttk.Button(toolbar, text="Fit", command=self.fit).pack(
             side="left", padx=(0, 4)
         )
