@@ -1,8 +1,9 @@
-"""Multi-reference color matching workbench for PicVidFix Desktop.
+"""Multi-reference color analysis workbench for PicVidFix Desktop.
 
-Collect photos and individual video frames, analyze same-scene overlap using
-reference_match.py, and review a spatial exposure recommendation map.
-No edits are applied until the user explicitly accepts an advisory suggestion.
+Show source and selected target images side-by-side. Both video panes have
+independent frame sliders, exact numeric frame entry, and visible 0-based
+frame counts. Analysis remains advisory until the user explicitly applies
+the optional global recommendation.
 """
 
 from __future__ import annotations
@@ -10,8 +11,9 @@ from __future__ import annotations
 import queue
 import threading
 import tkinter as tk
+from dataclasses import dataclass
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
 import cv2
@@ -25,6 +27,7 @@ from reference_match import (
     analyze_references,
     format_report,
 )
+from reference_preview import FramePreviewPanel, frame_caption
 
 IMAGE_TYPES = (
     ("Photo files", "*.jpg *.jpeg *.png *.tif *.tiff *.bmp *.webp"),
@@ -37,7 +40,7 @@ VIDEO_TYPES = (
 
 
 def prepare_reference(frame: np.ndarray) -> np.ndarray:
-    """Keep reference snapshots small enough for several to coexist in RAM."""
+    """Limit analysis-cache RAM without overwriting an original image."""
     height, width = frame.shape[:2]
     scale = min(1.0, MAX_ANALYSIS_SIDE / max(height, width))
     if scale >= 1.0:
@@ -49,7 +52,7 @@ def prepare_reference(frame: np.ndarray) -> np.ndarray:
 
 
 def describe_reference(report: ReferenceReport) -> str:
-    """Provide useful human interpretation without claiming automatic truth."""
+    """Explain positive/negative EV and the limits of match confidence."""
     successful = sum(item.matched for item in report.references)
     return (
         f"{successful} of {len(report.references)} reference(s) aligned. "
@@ -59,8 +62,22 @@ def describe_reference(report: ReferenceReport) -> str:
     )
 
 
+@dataclass
+class ReferenceItem:
+    """Editable video-frame or static image entry in the comparison list."""
+
+    label: str
+    frame: np.ndarray
+    video_path: str | None = None
+    frame_index: int | None = None
+    frame_count: int | None = None
+
+    def display_label(self) -> str:
+        return frame_caption(self.label, self.frame_index, self.frame_count)
+
+
 class ReferenceMatchDialog:
-    """Desktop UI for reference collection, inspection, and optional adoption."""
+    """Collect, preview, scrub and compare multiple reference images or frames."""
 
     def __init__(
         self,
@@ -68,101 +85,162 @@ class ReferenceMatchDialog:
         source_provider: Callable[[], np.ndarray | None],
         source_label: Callable[[], str],
         apply_callback: Callable[[ReferenceReport], None],
+        source_video_info: Callable[[], tuple[str, int, int] | None] | None = None,
     ) -> None:
         self.source_provider = source_provider
         self.source_label = source_label
         self.apply_callback = apply_callback
-        self.references: list[tuple[str, np.ndarray]] = []
+        self.source_video_info = source_video_info
+        self.references: list[ReferenceItem] = []
         self.results: queue.Queue = queue.Queue()
         self.report: ReferenceReport | None = None
         self.busy = False
+        self.revision = 0
 
         self.window = tk.Toplevel(parent)
         self.window.title("PicVidFix | Reference color analysis")
-        self.window.geometry("1000x840")
-        self.window.minsize(710, 580)
+        self.window.geometry("1050x930")
+        self.window.minsize(780, 650)
+        self.window.protocol("WM_DELETE_WINDOW", self.close)
 
-        header = ttk.Frame(self.window, padding=12)
+        header = ttk.Frame(self.window, padding=10)
         header.pack(fill="x")
         ttk.Label(
-            header, text="Compare overlapping regions with reference photos "
-            "or video frames.", wraplength=900,
+            header,
+            text="Compare source and reference images. For video, scrub each "
+            "preview independently or enter an exact frame number.",
+            wraplength=980,
         ).pack(anchor="w")
         ttk.Label(
             header,
-            text="Analysis only until you explicitly apply a global suggestion. "
-            "Unrelated scenes are not auto-matched.",
-            wraplength=900,
+            text="Only reliable same-scene overlaps are evaluated. "
+            "Recommendations do not change the image until approved.",
+            wraplength=980,
             foreground="#666666",
-        ).pack(anchor="w", pady=(4, 0))
+        ).pack(anchor="w", pady=(3, 0))
 
-        controls = ttk.Frame(self.window, padding=(12, 4, 12, 8))
-        controls.pack(fill="x")
+        commands = ttk.Frame(self.window, padding=(10, 4, 10, 7))
+        commands.pack(fill="x")
         ttk.Button(
-            controls, text="+ Photo(s)", command=self.add_photos
+            commands, text="+ Photo(s)", command=self.add_photos
         ).pack(side="left", padx=(0, 5))
         ttk.Button(
-            controls, text="+ Video frame", command=self.add_video_frame
+            commands, text="+ Video", command=self.add_video_frame
         ).pack(side="left", padx=(0, 5))
         ttk.Button(
-            controls, text="+ Current frame", command=self.add_current_frame
+            commands, text="+ Source snapshot", command=self.add_current_frame
         ).pack(side="left", padx=(0, 5))
         ttk.Button(
-            controls, text="Remove selected", command=self.remove_selected
+            commands, text="Remove selected", command=self.remove_selected
         ).pack(side="left", padx=(0, 5))
         self.analyze_button = ttk.Button(
-            controls, text="Analyze overlap", command=self.analyze
+            commands, text="Analyze overlap", command=self.analyze
         )
         self.analyze_button.pack(side="right")
 
-        list_box = ttk.LabelFrame(
-            self.window, text="References (same location / scene preferred)",
-            padding=8,
+        previews = ttk.Frame(self.window, padding=(10, 0, 10, 6))
+        previews.pack(fill="both", expand=False)
+        self.source_panel = FramePreviewPanel(
+            previews, "Source (current comparison)", self._source_changed
         )
-        list_box.pack(fill="x", padx=12, pady=(0, 7))
-        self.ref_list = tk.Listbox(list_box, height=4, selectmode="extended")
+        self.source_panel.pack(side="left", fill="both", expand=True, padx=(0, 5))
+        self.reference_panel = FramePreviewPanel(
+            previews, "Reference (selected below)", self._reference_changed
+        )
+        self.reference_panel.pack(side="left", fill="both", expand=True, padx=(5, 0))
+        self._load_source()
+
+        list_box = ttk.LabelFrame(
+            self.window, text="Reference images and video frame numbers",
+            padding=6,
+        )
+        list_box.pack(fill="x", padx=10, pady=(0, 6))
+        self.ref_list = tk.Listbox(
+            list_box, height=4, selectmode="extended", exportselection=False
+        )
         self.ref_list.pack(fill="x")
+        self.ref_list.bind("<<ListboxSelect>>", self._selected_reference)
 
         region = ttk.LabelFrame(
-            self.window, text="Suggested exposure shifts by overlapping region (EV)",
-            padding=8,
+            self.window, text="Matched overlap: suggested regional exposure (EV)",
+            padding=6,
         )
-        region.pack(fill="both", padx=12, pady=7)
+        region.pack(fill="both", padx=10, pady=(0, 6))
         self.heatmap = tk.Canvas(
-            region, height=190, background="#17212e", highlightthickness=0
+            region, height=135, background="#17212e", highlightthickness=0
         )
         self.heatmap.pack(fill="x", expand=True)
         self.heatmap.bind("<Configure>", lambda _event: self.draw_heatmap())
 
-        body = ttk.LabelFrame(self.window, text="Reference matching results", padding=8)
-        body.pack(fill="both", expand=True, padx=12, pady=7)
+        detail_box = ttk.LabelFrame(
+            self.window, text="Alignment, confidence and lighting estimates",
+            padding=6,
+        )
+        detail_box.pack(fill="both", expand=True, padx=10, pady=(0, 6))
         self.details = tk.Text(
-            body, height=10, wrap="word", background="#101824",
+            detail_box, height=8, wrap="word", background="#101824",
             foreground="#dcece9", insertbackground="#dcece9",
             font=("Consolas", 10), padx=9, pady=9,
         )
         self.details.pack(fill="both", expand=True)
-        self.details.insert(
-            "1.0",
-            "Add reference photos or individual video frames. "
-            "Then click Analyze overlap.\n"
-            "Tip: you can move the main video's timeline and add snapshots "
-            "from several frames before analyzing.",
+        self._set_details(
+            "Choose one or more reference images or videos. "
+            "Select any list item to preview it. "
+            "Video sliders and frame entry fields choose exact comparison frames."
         )
-        self.details.configure(state="disabled")
 
-        footer = ttk.Frame(self.window, padding=(12, 4, 12, 12))
+        footer = ttk.Frame(self.window, padding=(10, 5, 10, 10))
         footer.pack(fill="x")
-        self.status = tk.StringVar(value="No reference images loaded.")
+        self.status = tk.StringVar(value="Choose a reference to begin.")
         ttk.Label(
-            footer, textvariable=self.status, wraplength=690
+            footer, textvariable=self.status, wraplength=650
         ).pack(side="left", fill="x", expand=True)
         self.apply_button = ttk.Button(
-            footer, text="Apply global EV + RGB gains...",
+            footer, text="Apply global EV + B/G/R...",
             command=self.apply_suggestion, state="disabled"
         )
         self.apply_button.pack(side="right")
-        self.window.after(120, self.poll_results)
+        self.window.after(130, self.poll_results)
+
+    def _load_source(self) -> None:
+        frame = self.source_provider()
+        if frame is None:
+            return
+        information = (
+            self.source_video_info() if self.source_video_info else None
+        )
+        if information:
+            path, index, count = information
+            self.source_panel.set_frame(
+                frame, Path(path).name, video_path=path,
+                frame_index=index, frame_count=count,
+            )
+        else:
+            self.source_panel.set_frame(frame, self.source_label())
+
+    def _invalidate(self) -> None:
+        """Prevent an in-flight analysis from attaching to changed frames."""
+        self.revision += 1
+        self.report = None
+        self.apply_button.configure(state="disabled")
+        self.draw_heatmap()
+
+    def _source_changed(self, _index: int, _frame: np.ndarray) -> None:
+        self._invalidate()
+        self.status.set("Source frame changed. Analyze again to compare it.")
+
+    def _reference_changed(self, index: int, frame: np.ndarray) -> None:
+        selected = self.ref_list.curselection()
+        if not selected:
+            return
+        item = self.references[selected[0]]
+        item.frame = prepare_reference(frame)
+        item.frame_index = index
+        self.ref_list.delete(selected[0])
+        self.ref_list.insert(selected[0], item.display_label())
+        self.ref_list.selection_set(selected[0])
+        self._invalidate()
+        self.status.set("Reference frame changed. Analyze again for new results.")
 
     def _set_details(self, content: str) -> None:
         self.details.configure(state="normal")
@@ -170,13 +248,43 @@ class ReferenceMatchDialog:
         self.details.insert("1.0", content)
         self.details.configure(state="disabled")
 
-    def _add(self, label: str, frame: np.ndarray) -> None:
-        """Store a copy and invalidate the previous analysis."""
-        self.references.append((label, prepare_reference(frame)))
-        self.ref_list.insert("end", label)
-        self.report = None
-        self.apply_button.configure(state="disabled")
+    def _add(
+        self, label: str, frame: np.ndarray,
+        *,
+        video_path: str | None = None,
+        frame_index: int | None = None,
+        frame_count: int | None = None,
+    ) -> None:
+        item = ReferenceItem(
+            label=label, frame=prepare_reference(frame),
+            video_path=video_path, frame_index=frame_index,
+            frame_count=frame_count,
+        )
+        self.references.append(item)
+        index = len(self.references) - 1
+        self.ref_list.insert("end", item.display_label())
+        self.ref_list.selection_clear(0, "end")
+        self.ref_list.selection_set(index)
+        self.ref_list.activate(index)
+        self._show_reference(index)
+        self._invalidate()
         self.status.set(f"{len(self.references)} reference(s) ready for analysis.")
+
+    def _show_reference(self, index: int) -> None:
+        item = self.references[index]
+        self.reference_panel.set_frame(
+            item.frame, item.label,
+            video_path=item.video_path,
+            frame_index=item.frame_index,
+            frame_count=item.frame_count,
+        )
+
+    def _selected_reference(self, _event=None) -> None:
+        selected = self.ref_list.curselection()
+        if selected:
+            self._show_reference(selected[0])
+        else:
+            self.reference_panel.clear()
 
     def add_photos(self) -> None:
         paths = filedialog.askopenfilenames(
@@ -188,20 +296,25 @@ class ReferenceMatchDialog:
             if frame is None:
                 messagebox.showwarning(
                     "Reference image", "Cannot decode " + str(path),
-                    parent=self.window
+                    parent=self.window,
                 )
                 continue
             self._add(Path(path).name, frame)
 
     def add_current_frame(self) -> None:
-        frame = self.source_provider()
+        frame = self.source_panel.selected_frame()
         if frame is None:
             messagebox.showinfo(
-                "Reference frame", "Open a photo or video first.",
+                "Reference frame", "Open a source photo or video first.",
                 parent=self.window,
             )
             return
-        self._add(self.source_label(), frame)
+        pane = self.source_panel
+        self._add(
+            pane.filename, frame,
+            video_path=pane.video_path, frame_index=pane.frame_index,
+            frame_count=pane.frame_count,
+        )
 
     def add_video_frame(self) -> None:
         path = filedialog.askopenfilename(
@@ -213,79 +326,73 @@ class ReferenceMatchDialog:
         capture = cv2.VideoCapture(path)
         if not capture.isOpened():
             messagebox.showerror(
-                "Reference video", "Could not open the video.",
-                parent=self.window,
+                "Reference video", "Could not open video.", parent=self.window
             )
             return
         try:
-            length = max(1, int(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
-            index = simpledialog.askinteger(
-                "Reference video frame",
-                f"Select frame index from 0 to {length - 1}:",
-                parent=self.window, minvalue=0, maxvalue=length - 1,
-                initialvalue=0,
-            )
-            if index is None:
-                return
-            capture.set(cv2.CAP_PROP_POS_FRAMES, index)
+            count = max(1, int(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
             success, frame = capture.read()
             if not success:
                 messagebox.showerror(
-                    "Reference video", "Could not decode selected frame.",
+                    "Reference video", "Could not decode frame 0.",
                     parent=self.window,
                 )
                 return
-            self._add(f"{Path(path).name} | frame {index}", frame)
+            self._add(
+                Path(path).name, frame, video_path=path,
+                frame_index=0, frame_count=count,
+            )
         finally:
             capture.release()
 
     def remove_selected(self) -> None:
-        indices = list(self.ref_list.curselection())
-        if not indices:
+        selected = self.ref_list.curselection()
+        if not selected:
             return
-        for index in reversed(indices):
+        for index in reversed(selected):
             del self.references[index]
             self.ref_list.delete(index)
-        self.report = None
-        self.apply_button.configure(state="disabled")
+        self.ref_list.selection_clear(0, "end")
+        if self.references:
+            index = min(selected[0], len(self.references) - 1)
+            self.ref_list.selection_set(index)
+            self._show_reference(index)
+        else:
+            self.reference_panel.clear()
+        self._invalidate()
         self.status.set(f"{len(self.references)} reference(s) remaining.")
-        self.draw_heatmap()
 
     def analyze(self) -> None:
         if self.busy:
             return
-        source = self.source_provider()
-        if source is None:
+        source = self.source_panel.selected_frame()
+        if source is None or not self.references:
             messagebox.showinfo(
-                "Reference analysis", "Open a source image or video first.",
+                "Reference analysis",
+                "Open a source and select at least one reference.",
                 parent=self.window,
             )
             return
-        if not self.references:
-            messagebox.showinfo(
-                "Reference analysis", "Add a reference image or frame first.",
-                parent=self.window,
-            )
-            return
-        references = list(self.references)
+        references = [
+            (item.display_label(), item.frame.copy())
+            for item in self.references
+        ]
         self.busy = True
-        self.report = None
+        self._invalidate()
+        revision = self.revision
         self.analyze_button.configure(state="disabled")
-        self.apply_button.configure(state="disabled")
-        self.status.set("Aligning reference images and measuring overlap...")
-        self._set_details("Analyzing locally. No images are uploaded.")
+        self.status.set("Aligning selected frames and measuring overlap...")
+        self._set_details("Working locally. No images are uploaded.")
 
         def worker() -> None:
             try:
                 report = analyze_references(source, references)
-                self.results.put(("complete", report))
+                self.results.put(("complete", revision, report))
             except Exception as error:
-                self.results.put(("error", str(error)))
+                self.results.put(("error", revision, str(error)))
 
         threading.Thread(
-            target=worker,
-            name="PicVidFix reference comparison",
-            daemon=True,
+            target=worker, name="PicVidFix reference analysis", daemon=True
         ).start()
 
     def poll_results(self) -> None:
@@ -293,11 +400,16 @@ class ReferenceMatchDialog:
             return
         try:
             while True:
-                kind, payload = self.results.get_nowait()
+                kind, revision, payload = self.results.get_nowait()
                 self.busy = False
                 self.analyze_button.configure(state="normal")
+                if revision != self.revision:
+                    self.status.set(
+                        "Frames changed while analyzing. Analyze again."
+                    )
+                    continue
                 if kind == "error":
-                    self.status.set("Reference analysis failed.")
+                    self.status.set("Reference comparison failed.")
                     self._set_details(str(payload))
                     continue
                 self.report = payload
@@ -308,8 +420,8 @@ class ReferenceMatchDialog:
                     item for item in payload.references if item.matched
                 ]
                 self.status.set(
-                    f"{len(matching)} of {len(payload.references)} overlap matches. "
-                    "Inspect disagreements before applying corrections."
+                    f"{len(matching)}/{len(payload.references)} reliable overlaps. "
+                    "Inspect disagreement before applying global corrections."
                 )
                 enable = (
                     bool(matching)
@@ -324,7 +436,7 @@ class ReferenceMatchDialog:
                 self.draw_heatmap()
         except queue.Empty:
             pass
-        self.window.after(120, self.poll_results)
+        self.window.after(130, self.poll_results)
 
     def draw_heatmap(self) -> None:
         canvas = self.heatmap
@@ -333,12 +445,10 @@ class ReferenceMatchDialog:
         height = max(1, canvas.winfo_height())
         if self.report is None:
             canvas.create_text(
-                width / 2, height / 2,
-                text="No analysis yet", fill="#abb9c9",
-                font=("Segoe UI", 11),
+                width / 2, height / 2, text="No analysis yet",
+                fill="#abb9c9", font=("Segoe UI", 11),
             )
             return
-
         for row in range(GRID_ROWS):
             for col in range(GRID_COLUMNS):
                 value = self.report.tile_ev[row][col]
@@ -347,41 +457,42 @@ class ReferenceMatchDialog:
                 y0 = row * height / GRID_ROWS
                 y1 = (row + 1) * height / GRID_ROWS
                 if value is None:
-                    fill = "#27313c"
-                    label = "?"
+                    fill, label = "#27313c", "?"
                 elif value >= 0:
                     intensity = int(min(150, 30 + abs(value) * 60))
-                    fill = f"#1b{65 + intensity:02x}5a"
-                    label = f"{value:+.1f}"
+                    fill, label = f"#1b{65 + intensity:02x}5a", f"{value:+.1f}"
                 else:
                     intensity = int(min(140, 25 + abs(value) * 55))
-                    fill = f"#{80 + intensity:02x}4b26"
-                    label = f"{value:+.1f}"
+                    fill, label = f"#{80 + intensity:02x}4b26", f"{value:+.1f}"
                 canvas.create_rectangle(
-                    x0, y0, x1, y1,
-                    fill=fill, outline="#465463", width=1,
+                    x0, y0, x1, y1, fill=fill,
+                    outline="#465463", width=1,
                 )
                 canvas.create_text(
-                    (x0 + x1) / 2, (y0 + y1) / 2, text=label,
-                    fill="#f3f6fb", font=("Consolas", 11),
+                    (x0 + x1) / 2, (y0 + y1) / 2,
+                    text=label, fill="#f3f6fb",
+                    font=("Consolas", 11),
                 )
 
     def apply_suggestion(self) -> None:
-        """Explicit confirmation avoids silently replacing existing settings."""
         report = self.report
         if report is None or report.exposure_ev is None:
             return
         gains = report.balance_bgr or (1.0, 1.0, 1.0)
         permitted = messagebox.askyesno(
             "Apply reference suggestion?",
-            "Replace your current global exposure and three RGB gain "
-            "controls with this reference-based estimate?\n\n"
+            "Replace your global exposure and B/G/R gain controls?\n\n"
             f"Exposure: {report.exposure_ev:+.2f} EV\n"
-            f"B / G / R: {gains[0]:.3f}, {gains[1]:.3f}, {gains[2]:.3f}\n\n"
-            "The local heatmap is diagnostic only; it will NOT be applied. "
-            "The original file is not changed.",
+            f"B/G/R: {gains[0]:.3f}, {gains[1]:.3f}, {gains[2]:.3f}\n\n"
+            "The local heatmap is diagnostic and will NOT be applied. "
+            "Your original file is unchanged.",
             parent=self.window,
         )
         if permitted:
             self.apply_callback(report)
-            self.status.set("Global suggestion applied to the desktop controls.")
+            self.status.set("Global suggestion applied. Regional map is advisory.")
+
+    def close(self) -> None:
+        self.source_panel.clear()
+        self.reference_panel.clear()
+        self.window.destroy()
