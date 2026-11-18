@@ -50,6 +50,15 @@ py video_color_gui.py
 
 MP4 export requires a separate FFmpeg installation with `ffmpeg.exe` on PATH.
 
+The desktop **Compare photos / video frames...** panel accepts multiple
+reference photos and individual video frames. It uses ORB feature matching
+and RANSAC to detect overlapping content, estimates consensus exposure and
+relative B/G/R balance, and displays a 6×8 map of suggested regional EV
+shifts. You can explicitly accept the *global* estimate; local shifts are
+analysis-only until spatial application is implemented. Unmatched references
+never trigger an automatic correction. For now this workflow requires
+approximately the same scene, not unrelated cinematic style references.
+
 The desktop app retains manual color adjustment, image mode, video mode,
 subject-priority exposure analysis over a fixed frame region, presets and
 MP4 export. **Inspect / Draw box** opens a zoomable, panning ROI inspector
@@ -65,6 +74,8 @@ are outside its current scope.
 - `video_color_gui.py`: Current Python GUI
 - `color_pipeline.py`: Shared Python correction engine
 - `region_inspector.py`: Dedicated desktop zoom/pan and ROI annotation tool
+- `reference_match.py`: Robust overlap detection and multi-reference EV/color comparisons
+- `reference_dialog.py`: Desktop panel to collect photos/frames and review regional suggestions
 - `HueSatVal_v1_5_standalone.py`: Historical all-in-one v1.5 desktop version
   (does **not** yet include the new region inspector)
 - `baseline/`: Original unmodified `HueSatVal3.py`
