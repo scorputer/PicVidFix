@@ -1292,6 +1292,10 @@ class VideoColorApp:
         self.media_kind = kind
         self.source_frame = frame
         self.region_box = None
+        self.object_mask = None
+        self.object_mask_frame = None
+        self.object_enabled.set(False)
+        self.object_fixed_video.set(False)
         if kind == "image":
             self._update_time()
         self.current_frame = 0
@@ -1330,6 +1334,11 @@ class VideoColorApp:
         self.fps = candidate.get(cv2.CAP_PROP_FPS) or 30.0
         self.media_kind = "video"
         self.region_box = None
+        self.object_mask = None
+        self.object_mask_frame = None
+        self.object_enabled.set(False)
+        self.object_fixed_video.set(False)
+        self._object_changed()
         self.auto_analysis_cancel.set()
         self.auto_levels = None
         self.auto_levels_key = None
@@ -1584,6 +1593,10 @@ class VideoColorApp:
             return self.object_mask
         return None
 
+    def object_mask_for_display(self) -> np.ndarray | None:
+        """Only show object outlines on frames that actually use the mask."""
+        return self._object_mask_for_frame(self.current_frame)
+
     def _select_object(self) -> None:
         """Open the zoomable, GrabCut-based object segmentation inspector."""
         if self.source_frame is None:
@@ -1777,8 +1790,15 @@ class VideoColorApp:
         except (ValueError, tk.TclError) as exc:
             self.status.set(f"Preview settings error: {exc}")
             return
+        try:
+            object_settings = self._object_settings()
+        except ValueError as exc:
+            self.status.set(f"Object settings error: {exc}")
+            return
+        object_mask = self._object_mask_for_frame(self.current_frame)
         self.preview_pending = (
-            self.preview_generation, self.source_frame, settings
+            self.preview_generation, self.source_frame, settings,
+            object_mask, object_settings,
         )
         self._dispatch_preview()
 
@@ -1786,14 +1806,17 @@ class VideoColorApp:
         """At most one calculation runs, with only the latest frame pending."""
         if self.preview_busy or self.preview_pending is None or self.closing:
             return
-        generation, frame, settings = self.preview_pending
+        generation, frame, settings, object_mask, object_settings = (
+            self.preview_pending
+        )
         self.preview_pending = None
         self.preview_busy = True
 
         def worker() -> None:
             try:
                 original, corrected = prepare_preview_frame(
-                    frame, settings, self.PREVIEW_WIDTH, self.PREVIEW_HEIGHT
+                    frame, settings, self.PREVIEW_WIDTH, self.PREVIEW_HEIGHT,
+                    object_mask=object_mask, object_settings=object_settings,
                 )
                 self.events.put(("preview", generation, original, corrected))
             except Exception as exc:
@@ -1825,6 +1848,24 @@ class VideoColorApp:
             )
             for preview in (shown_original, shown_corrected):
                 cv2.rectangle(preview, start, end, (165, 235, 134), 2)
+
+        if (
+            self.object_show_outline.get()
+            and self.object_mask_for_display() is not None
+        ):
+            display_mask = cv2.resize(
+                self.object_mask,
+                (w, h),
+                interpolation=cv2.INTER_NEAREST,
+            )
+            outlines, _ = cv2.findContours(
+                (display_mask >= 128).astype(np.uint8),
+                cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE,
+            )
+            for preview in (shown_original, shown_corrected):
+                cv2.drawContours(
+                    preview, outlines, -1, (210, 245, 50), 2,
+                )
 
         if self.ring_enabled.get() and self.ring_show_guide.get():
             # Annotation never touches self.source_frame or exported pixels.
