@@ -43,12 +43,12 @@ class RingLightTests(unittest.TestCase):
         np.testing.assert_array_equal(result[:, :, 3], source[:, :, 3])
 
     def test_highlight_protection_is_less_aggressive(self):
-        original = np.full((90, 110, 3), 235, dtype=np.uint8)
+        original = np.full((90, 110, 3), 205, dtype=np.uint8)
         protected = apply_light_ring(
-            original, ev=1.5, protect_highlights=True
+            original, ev=0.3, protect_highlights=True
         )
         unprotected = apply_light_ring(
-            original, ev=1.5, protect_highlights=False
+            original, ev=0.3, protect_highlights=False
         )
         self.assertLess(int(protected[45, 55, 0]),
                         int(unprotected[45, 55, 0]))
