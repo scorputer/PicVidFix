@@ -62,6 +62,22 @@ class RingLightTests(unittest.TestCase):
         self.assertGreater(estimate, 0.8)
         self.assertLess(center, surrounding)
 
+    def test_estimator_suggests_negative_ev_for_hotspot(self):
+        image = np.full((320, 320, 3), 85, dtype=np.uint8)
+        image[128:193, 128:193] = 190
+        ev, center, outer = estimate_ring_ev(image, radius=0.65)
+        self.assertLess(ev, -0.6)
+        self.assertGreater(center, outer)
+
+    def test_ring_center_can_move_to_foreground(self):
+        image = np.full((101, 101, 3), 75, dtype=np.uint8)
+        moved = apply_light_ring(
+            image, ev=0.7, center_x=0.15, center_y=0.75,
+            radius=0.18, feather=0.6,
+        )
+        self.assertGreater(int(moved[75, 15, 0]),
+                           int(moved[50, 50, 0]))
+
     def test_estimator_neutral_for_uniform_scene(self):
         image = np.full((250, 300, 3), 120, dtype=np.uint8)
         value, center, outer = estimate_ring_ev(image)
