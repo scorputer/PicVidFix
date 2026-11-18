@@ -1096,6 +1096,15 @@ class VideoColorApp:
             self.auto_analyzing = False
             self.auto_pending_key = None
             self.auto_info.set("Off. Manual exposure only.")
+        self.object_mask = None
+        self.object_mask_frame = None
+        self.object_enabled.set(False)
+        self.object_fixed_video.set(False)
+        self.object_show_outline.set(True)
+        for name, _, _, _, default in OBJECT_SPECS:
+            self.object_values[name].set(default)
+            self.object_numeric[name].set(f"{default:g}")
+        self._object_changed()
         self.ring_enabled.set(False)
         self.ring_show_guide.set(True)
         for name, _, _, _, default in RING_SPECS:
@@ -2087,6 +2096,9 @@ class VideoColorApp:
                     "calibration_hex": self.calibration_hex.get(),
                     "remap_hex": self.remap_hex.get(),
                     "auto_exposure": asdict(self._get_auto_settings()),
+                    # Only parameters are portable. Object masks are
+                    # source-dependent and must be selected for each photo.
+                    "object_correction": asdict(self._object_settings()),
                 },
                 indent=2,
             ),
@@ -2132,6 +2144,20 @@ class VideoColorApp:
                 self.ring_values[name].set(value)
                 self.ring_numeric[name].set(f"{value:g}")
             self._ring_changed()
+            object_data = ObjectCorrectionSettings(
+                **payload.get("object_correction", {})
+            )
+            for name, _, low, high, _ in OBJECT_SPECS:
+                value = float(getattr(object_data, name))
+                if not math.isfinite(value) or not low <= value <= high:
+                    raise ValueError(f"Invalid saved object correction: {name}")
+                self.object_values[name].set(value)
+                self.object_numeric[name].set(f"{value:g}")
+            # Reenable only when a mask already belongs to this source.
+            self.object_enabled.set(
+                bool(object_data.enabled and self.object_mask is not None)
+            )
+            self._object_changed()
             auto = AutoExposureSettings(**payload.get("auto_exposure", {}))
             self.auto_enabled.set(auto.enabled)
             self.auto_roi = tuple(auto.roi)
@@ -2178,7 +2204,11 @@ class VideoColorApp:
             messagebox.showerror("Save image", "Choose a different output filename.")
             return
         try:
-            save_corrected_image(self.source_path, destination, settings, auto)
+            save_corrected_image(
+                self.source_path, destination, settings, auto,
+                object_mask=self._object_mask_for_frame(self.current_frame),
+                object_settings=self._object_settings(),
+            )
         except Exception as exc:
             messagebox.showerror("Save image", str(exc))
             return
@@ -2196,6 +2226,25 @@ class VideoColorApp:
         except ValueError as exc:
             messagebox.showerror("Export", str(exc))
             return
+        object_settings = self._object_settings()
+        mask_for_export = None
+        if self.object_mask is not None and object_settings.enabled:
+            if self.object_fixed_video.get():
+                if not messagebox.askyesno(
+                    "Fixed object mask across video?",
+                    "The selected object mask stays in the SAME image "
+                    "position for every frame. It will NOT track a moving "
+                    "subject. Continue exporting with this fixed mask?",
+                ):
+                    return
+                mask_for_export = self.object_mask.copy()
+            elif not messagebox.askyesno(
+                "Object correction is frame-only",
+                f"Your object was selected on frame "
+                f"{self.object_mask_frame}. Tracking is not yet available. "
+                "Export the video WITHOUT object-local correction?",
+            ):
+                return
         if not shutil.which("ffmpeg"):
             messagebox.showerror(
                 "FFmpeg required",
@@ -2245,6 +2294,8 @@ class VideoColorApp:
                     lambda done, total: self.events.put(("progress", done, total)),
                     lambda stage: self.events.put(("stage", stage)),
                     auto=auto, precomputed_levels=readings,
+                    object_mask=mask_for_export,
+                    object_settings=object_settings,
                 )
                 self.events.put(("success", str(destination)))
             except InterruptedError:
