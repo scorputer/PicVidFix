@@ -19,6 +19,7 @@ class ReferencePreviewTests(unittest.TestCase):
 
     def test_valid_frame_index_accepts_zero_and_last(self):
         self.assertEqual(bounded_frame_index("0", 100), 0)
+        self.assertEqual(bounded_frame_index("007", 100), 7)
         self.assertEqual(bounded_frame_index("99", 100), 99)
         self.assertEqual(bounded_frame_index(17, 100), 17)
 
