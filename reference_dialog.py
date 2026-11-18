@@ -131,6 +131,9 @@ class ReferenceMatchDialog:
             commands, text="+ Source snapshot", command=self.add_current_frame
         ).pack(side="left", padx=(0, 5))
         ttk.Button(
+            commands, text="Refresh source", command=self.refresh_source
+        ).pack(side="left", padx=(0, 5))
+        ttk.Button(
             commands, text="Remove selected", command=self.remove_selected
         ).pack(side="left", padx=(0, 5))
         self.analyze_button = ttk.Button(
@@ -218,12 +221,22 @@ class ReferenceMatchDialog:
         else:
             self.source_panel.set_frame(frame, self.source_label())
 
+    def refresh_source(self) -> None:
+        """Reload the latest frame/photo selected in the main editor."""
+        self._load_source()
+        self._invalidate()
+        self.status.set("Source refreshed from the main editor. Analyze again.")
+
     def _invalidate(self) -> None:
         """Prevent an in-flight analysis from attaching to changed frames."""
         self.revision += 1
         self.report = None
         self.apply_button.configure(state="disabled")
         self.draw_heatmap()
+        self._set_details(
+            "Source or reference selection changed. "
+            "Click Analyze overlap to calculate new results."
+        )
 
     def _source_changed(self, _index: int, _frame: np.ndarray) -> None:
         self._invalidate()
