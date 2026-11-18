@@ -20,6 +20,7 @@ from object_mask import (
     apply_object_correction,
     paint_object_mask,
     segment_object,
+    mask_applies_to_frame,
 )
 from video_color_gui import prepare_preview_frame, save_corrected_image
 
@@ -179,6 +180,24 @@ class ObjectMaskTests(unittest.TestCase):
                 self.frame, np.zeros((0, 0), dtype=np.uint8),
                 ObjectCorrectionSettings(enabled=True),
             )
+
+    def test_video_object_mask_applies_only_to_selected_frame_by_default(self):
+        self.assertTrue(mask_applies_to_frame(
+            is_video=True, current_frame=120, selected_frame=120,
+            fixed_for_video=False,
+        ))
+        self.assertFalse(mask_applies_to_frame(
+            is_video=True, current_frame=121, selected_frame=120,
+            fixed_for_video=False,
+        ))
+        self.assertTrue(mask_applies_to_frame(
+            is_video=True, current_frame=121, selected_frame=120,
+            fixed_for_video=True,
+        ))
+        self.assertTrue(mask_applies_to_frame(
+            is_video=False, current_frame=0, selected_frame=None,
+            fixed_for_video=False,
+        ))
 
     def test_preset_parameters_serializable_without_source_mask(self):
         settings = ObjectCorrectionSettings(
