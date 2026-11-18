@@ -1,5 +1,18 @@
 # Change history
 
+## Desktop v1.6: frame-aware comparisons and virtual ring lighting
+
+- Side-by-side source/target previews in the multi-reference comparison panel,
+  with video frame slider and editable exact frame index in both panes
+- Frame numbers in the main original and corrected video previews, reference
+  list and previews, video ROI inspector, and metering/calibration popups
+- Signed virtual ring-light exposure correction with normalized center,
+  adjustable radius/feathering, and optional center-vs-edge EV estimation
+- Shared color pipeline keeps ring corrections consistent for preview,
+  still-image save, and MP4 export; presets save the ring controls
+- Additional automated regression tests for video indexes, preview scaling,
+  ring falloff, image immutability, alpha, highlighted pixels and metering
+
 ## Reference-guided color analysis (desktop preview)
 
 - Added a multi-reference comparison panel: multiple still photos, selected
@@ -37,6 +50,7 @@ The original project is based on `HueSatVal3.py` (preserved in `baseline/`). Ver
 | v1.5 | Fixed-region, smoothed subject-priority auto-exposure | Modular and standalone source at root |
 | v1.5.1 | Main-preview X/Y cursor display, zoomable/pannable ROI inspector popup, non-destructive box overlays and JSON export | Current modular desktop GUI + region_inspector.py; standalone remains v1.5 |
 | v1.5.2 | Multi-reference overlap/EV analysis for still images and video frames; optional global suggestion, regional diagnostic heatmap and tests | Current modular desktop GUI + reference_match.py + reference_dialog.py; standalone remains v1.5 |
+| v1.6 | Independent video source/reference frame scrubbing, visible frame numbering, preview panes and signed radial light-ring correction | Modular desktop source; standalone remains v1.5 |
 
 Historical GUIs are reference snapshots and are **not guaranteed to work** with the current root pipeline. To reproduce a specific historical version, use that version's original ZIP or match it with its contemporaneous dependencies. Video samples, complete original test suite, and original packaged releases have not yet been imported.
 
