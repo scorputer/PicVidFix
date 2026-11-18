@@ -1485,6 +1485,8 @@ class VideoColorApp:
             self.reference_dialog.window.lift()
             self.reference_dialog.window.focus_set()
             return
+        # Pause main playback so the source snapshot has a stable index.
+        self._pause()
         self.reference_dialog = ReferenceMatchDialog(
             self.root,
             source_provider=self._reference_source_frame,
