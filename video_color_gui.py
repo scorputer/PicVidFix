@@ -511,6 +511,7 @@ class VideoColorApp:
         }
         self.auto_info = tk.StringVar(value="Off. Background does not affect metering.")
         self.ring_enabled = tk.BooleanVar(value=False)
+        self.ring_show_guide = tk.BooleanVar(value=True)
         self.ring_values = {
             name: tk.DoubleVar(value=default)
             for name, _, _, _, default in RING_SPECS
@@ -719,6 +720,10 @@ class VideoColorApp:
         ttk.Checkbutton(
             control_host, text="Enable ring lighting correction",
             variable=self.ring_enabled, command=self._ring_changed,
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Checkbutton(
+            control_host, text="Show ring guide in preview only",
+            variable=self.ring_show_guide, command=self._schedule_preview,
         ).pack(anchor="w", pady=(0, 4))
         for name, label, low, high, default in RING_SPECS:
             row = ttk.Frame(control_host)
@@ -1586,6 +1591,23 @@ class VideoColorApp:
             )
             for preview in (shown_original, shown_corrected):
                 cv2.rectangle(preview, start, end, (165, 235, 134), 2)
+
+        if self.ring_enabled.get() and self.ring_show_guide.get():
+            # Annotation never touches self.source_frame or exported pixels.
+            ring_h, ring_w = shown_corrected.shape[:2]
+            cx = round(self.ring_values["ring_center_x"].get() * (ring_w - 1))
+            cy = round(self.ring_values["ring_center_y"].get() * (ring_h - 1))
+            radius = round(
+                self.ring_values["ring_radius"].get() * min(ring_w, ring_h)
+            )
+            cv2.circle(
+                shown_corrected, (cx, cy), max(1, radius),
+                (115, 230, 170), 1, cv2.LINE_AA,
+            )
+            cv2.drawMarker(
+                shown_corrected, (cx, cy), (115, 230, 170),
+                cv2.MARKER_CROSS, 12, 1,
+            )
 
         self.original_photo = self._to_photo(shown_original)
         self.adjusted_photo = self._to_photo(shown_corrected)
