@@ -1305,6 +1305,7 @@ class VideoColorApp:
         self.object_mask_frame = None
         self.object_enabled.set(False)
         self.object_fixed_video.set(False)
+        self._object_changed()
         if kind == "image":
             self._update_time()
         self.current_frame = 0
@@ -1627,7 +1628,12 @@ class VideoColorApp:
             f"Frame {self.current_frame} (0-based)"
             if self.media_kind == "video" else "Still image"
         )
-        existing_mask = self._object_mask_for_frame(self.current_frame)
+        existing_mask = (
+            self.object_mask
+            if self.media_kind != "video"
+            or self.current_frame == self.object_mask_frame
+            else None
+        )
         self.object_dialog = ObjectSelectionDialog(
             self.root,
             self.source_frame,
