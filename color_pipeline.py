@@ -12,6 +12,8 @@ from typing import Optional
 import cv2
 import numpy as np
 
+from light_ring import apply_light_ring
+
 
 @dataclass(frozen=True)
 class ColorSettings:
@@ -31,6 +33,12 @@ class ColorSettings:
     shadows: float = 0.0
     gamma: float = 1.0
     sharpness: float = 0.0
+    ring_enabled: bool = False
+    ring_ev: float = 0.0
+    ring_center_x: float = 0.5
+    ring_center_y: float = 0.5
+    ring_radius: float = 0.65
+    ring_feather: float = 0.75
 
 
 
@@ -300,5 +308,19 @@ def process_frame(frame: np.ndarray, settings: ColorSettings) -> np.ndarray:
         )
 
     if alpha is not None:
-        return np.dstack((bgr, alpha))
-    return bgr
+        finished = np.dstack((bgr, alpha))
+    else:
+        finished = bgr
+
+    # Optional virtual lighting field. This stage is part of the common
+    # process_frame path, so still previews and video exports remain aligned.
+    if settings.ring_enabled and settings.ring_ev != 0:
+        return apply_light_ring(
+            finished,
+            ev=settings.ring_ev,
+            center_x=settings.ring_center_x,
+            center_y=settings.ring_center_y,
+            radius=settings.ring_radius,
+            feather=settings.ring_feather,
+        )
+    return finished
