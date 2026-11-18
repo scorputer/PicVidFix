@@ -27,6 +27,23 @@ class ObjectCorrectionSettings:
     feather_px: float = 4.0
 
 
+def mask_applies_to_frame(
+    *,
+    is_video: bool,
+    current_frame: int,
+    selected_frame: int | None,
+    fixed_for_video: bool,
+) -> bool:
+    """Do not apply a selected video object's mask to unrelated frames.
+
+    Without explicit fixed-mask opt-in, only the source frame where the object
+    was selected may display its correction.
+    """
+    if not is_video:
+        return True
+    return bool(fixed_for_video or current_frame == selected_frame)
+
+
 def segment_object(
     image: np.ndarray,
     bounds: tuple[int, int, int, int],
