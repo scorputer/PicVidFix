@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 from light_ring import apply_light_ring
+from object_mask import ObjectCorrectionSettings, apply_object_correction
 
 
 @dataclass(frozen=True)
@@ -324,3 +325,22 @@ def process_frame(frame: np.ndarray, settings: ColorSettings) -> np.ndarray:
             feather=settings.ring_feather,
         )
     return finished
+
+def process_with_object(
+    frame: np.ndarray,
+    settings: ColorSettings,
+    object_mask: np.ndarray | None = None,
+    object_settings: ObjectCorrectionSettings | None = None,
+) -> np.ndarray:
+    """Compose global adjustments and optional object-only adjustments.
+
+    This wrapper is shared by desktop preview and both save/export paths.
+    A missing mask never changes the original global correction behavior.
+    """
+    corrected = process_frame(frame, settings)
+    if (
+        object_mask is None or object_settings is None
+        or not object_settings.enabled
+    ):
+        return corrected
+    return apply_object_correction(corrected, object_mask, object_settings)
