@@ -28,6 +28,8 @@ from PIL import Image, ImageTk
 
 from region_inspector import RegionInspector
 from light_ring import estimate_ring_ev
+from object_dialog import ObjectSelectionDialog
+from object_mask import ObjectCorrectionSettings
 from reference_dialog import ReferenceMatchDialog
 from reference_match import ReferenceReport
 from color_pipeline import (
@@ -39,6 +41,7 @@ from color_pipeline import (
     hex_to_bgr,
     measure_balance_offset,
     process_frame,
+    process_with_object,
 )
 
 
@@ -75,6 +78,8 @@ def prepare_preview_frame(
     max_width: int = 535,
     max_height: int = 355,
     extra_stops: float = 0.0,
+    object_mask: np.ndarray | None = None,
+    object_settings: ObjectCorrectionSettings | None = None,
 ):
     """Process original-resolution pixels before resizing for display.
 
@@ -84,7 +89,9 @@ def prepare_preview_frame(
     the saved image/video apart from codec compression and display color space.
     """
     adjusted = subject_adjusted_settings(settings, extra_stops)
-    corrected = process_frame(frame, adjusted)
+    corrected = process_with_object(
+        frame, adjusted, object_mask, object_settings,
+    )
     height, width = frame.shape[:2]
     scale = min(max_width / width, max_height / height, 1.0)
     if scale >= 1.0:
@@ -230,6 +237,8 @@ def save_corrected_image(
     destination: Path,
     settings: ColorSettings,
     auto: AutoExposureSettings | None = None,
+    object_mask: np.ndarray | None = None,
+    object_settings: ObjectCorrectionSettings | None = None,
 ) -> None:
     """Load an image, apply the shared pipeline, and save the corrected output."""
     source = Path(source)
@@ -245,7 +254,9 @@ def save_corrected_image(
         level = measure_subject_level(image, auto.roi)
         extra_stops = calculate_exposure_curve([level], 1.0, auto)[0]
         settings = subject_adjusted_settings(settings, extra_stops)
-    corrected = process_frame(image, settings)
+    corrected = process_with_object(
+        image, settings, object_mask, object_settings,
+    )
     if not cv2.imwrite(str(destination), corrected):
         raise RuntimeError(f"Unable to write image: {destination}")
 
@@ -259,6 +270,8 @@ def export_video(
     report_stage: Callable[[str], None] | None = None,
     auto: AutoExposureSettings | None = None,
     precomputed_levels: list[float] | None = None,
+    object_mask: np.ndarray | None = None,
+    object_settings: ObjectCorrectionSettings | None = None,
 ) -> None:
     """Export corrected video in two independent, cancellable stages.
 
@@ -361,7 +374,12 @@ def export_video(
                             )
                         else:
                             frame_settings = settings
-                        corrected = process_frame(frame, frame_settings)
+                        # A supplied mask occupies fixed image coordinates.
+                        # The caller must explicitly opt into this for video;
+                        # it does not follow moving subjects.
+                        corrected = process_with_object(
+                            frame, frame_settings, object_mask, object_settings,
+                        )
                         if process.poll() is not None:
                             if stop_event.is_set():
                                 raise InterruptedError("Export canceled")
