@@ -21,11 +21,13 @@ def bounded_frame_index(value: int | str, frame_count: int) -> int:
     """Validate the frame entry, never silently use a different frame."""
     if frame_count < 1:
         raise ValueError("Video has no decodable frame count.")
-    try:
-        index = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("Enter a whole-number frame index.") from exc
-    if str(value).strip() != str(index):
+    if isinstance(value, bool):
+        raise ValueError("Enter a whole-number frame index.")
+    if isinstance(value, int):
+        index = value
+    elif isinstance(value, str) and value.strip().isdecimal():
+        index = int(value.strip())
+    else:
         raise ValueError("Enter a whole-number frame index.")
     if index < 0 or index >= frame_count:
         raise ValueError(f"Frame must be between 0 and {frame_count - 1}.")
