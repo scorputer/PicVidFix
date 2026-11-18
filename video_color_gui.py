@@ -27,6 +27,8 @@ import cv2
 from PIL import Image, ImageTk
 
 from region_inspector import RegionInspector
+from reference_dialog import ReferenceMatchDialog
+from reference_match import ReferenceReport
 from color_pipeline import (
     AutoExposureSettings,
     ColorSettings,
@@ -485,6 +487,7 @@ class VideoColorApp:
         )
         # Region inspection is an annotation, independent of color settings.
         self.region_box: tuple[int, int, int, int] | None = None
+        self.reference_dialog: ReferenceMatchDialog | None = None
         self.pixel_position = tk.StringVar(value="X: —  Y: —")
         # Subject-priority auto exposure works across successive frames.
         # The selected ROI is normalized to source image dimensions.
@@ -678,6 +681,22 @@ class VideoColorApp:
             control_host, textvariable=self.auto_info,
             foreground="#666666", wraplength=330,
         ).pack(fill="x", pady=(5, 5))
+        ttk.Separator(control_host).pack(fill="x", pady=(5, 10))
+        ttk.Label(
+            control_host, text="Reference-guided color matching",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w", pady=(0, 5))
+        ttk.Button(
+            control_host, text="Compare photos / video frames...",
+            command=self._open_reference_dialog,
+        ).pack(fill="x", pady=(0, 4))
+        ttk.Label(
+            control_host, text=(
+                "Align overlapping scenes, compare multiple references, "
+                "and inspect recommended regional exposure shifts."
+            ),
+            foreground="#666666", wraplength=330,
+        ).pack(fill="x", pady=(0, 8))
         ttk.Separator(control_host).pack(fill="x", pady=(5, 10))
         ttk.Label(
             control_host, text="Photography", font=("Segoe UI", 12, "bold")
@@ -1256,6 +1275,61 @@ class VideoColorApp:
                 f"| {width} × {height} px"
             )
         self._schedule_preview()
+
+    def _reference_source_frame(self):
+        """Provide a stable snapshot of the currently selected frame."""
+        if self.source_frame is None:
+            return None
+        return self.source_frame.copy()
+
+    def _reference_source_label(self) -> str:
+        filename = (
+            self.source_path.name if self.source_path is not None else "Source"
+        )
+        if self.media_kind == "video":
+            return f"{filename} | frame {self.current_frame}"
+        return filename
+
+    def _apply_reference_suggestion(self, report: ReferenceReport) -> None:
+        """Apply only explicitly accepted GLOBAL reference recommendations.
+
+        The regional EV grid stays diagnostic. Do not sneak unreviewed local
+        masks into the color pipeline or change saved source pixels.
+        """
+        if report.exposure_ev is None or report.balance_bgr is None:
+            return
+        for name, value in zip(
+            ("blue_gain", "green_gain", "red_gain"), report.balance_bgr
+        ):
+            self._set_number(name, value)
+        self._set_number("exposure", report.exposure_ev)
+        self._schedule_preview()
+        self.status.set(
+            f"Applied global reference suggestion: "
+            f"{report.exposure_ev:+.2f} EV and B/G/R gains. "
+            "Local map is advisory only."
+        )
+
+    def _open_reference_dialog(self) -> None:
+        """Open or refocus the reference overlap and color comparison panel."""
+        if self.source_frame is None:
+            messagebox.showinfo(
+                "Reference matching", "Open a photo or video before comparing."
+            )
+            return
+        if (
+            self.reference_dialog is not None
+            and self.reference_dialog.window.winfo_exists()
+        ):
+            self.reference_dialog.window.lift()
+            self.reference_dialog.window.focus_set()
+            return
+        self.reference_dialog = ReferenceMatchDialog(
+            self.root,
+            source_provider=self._reference_source_frame,
+            source_label=self._reference_source_label,
+            apply_callback=self._apply_reference_suggestion,
+        )
 
     def _inspect_region(self) -> None:
         """Open a zoomable image inspector with a draggable ROI rectangle."""
