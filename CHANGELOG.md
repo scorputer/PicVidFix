@@ -1,5 +1,18 @@
 # Change history
 
+## Reference-guided color analysis (desktop preview)
+
+- Added a multi-reference comparison panel: multiple still photos, selected
+  frames from video files, or snapshots from the current clip
+- ORB/RANSAC registration rejects untrusted overlaps; only supported pixels
+  contribute to an EV map and global chromatic-balance suggestions
+- Weighted multi-reference consensus flags substantial exposure disagreement
+  and leaves unmatched grid cells unknown
+- User-confirmed application may update global exposure and RGB gains;
+  spatial suggestions are *diagnostics only*, not blended into export yet
+- New automated regression tests for alignment, false matches, consensus,
+  large-reference image preparation and non-destructive analysis
+
 ## Web releases
 
 | Version | Change |
