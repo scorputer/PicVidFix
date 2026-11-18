@@ -30,7 +30,7 @@ from PIL import Image, ImageTk
 from region_inspector import RegionInspector
 from light_ring import estimate_ring_ev
 from object_dialog import ObjectSelectionDialog
-from object_mask import ObjectCorrectionSettings
+from object_mask import ObjectCorrectionSettings, mask_applies_to_frame
 from reference_dialog import ReferenceMatchDialog
 from reference_match import ReferenceReport
 from color_pipeline import (
@@ -1595,9 +1595,11 @@ class VideoColorApp:
             return None
         if self.media_kind != "video":
             return self.object_mask
-        if (
-            self.object_fixed_video.get()
-            or frame_index == self.object_mask_frame
+        if mask_applies_to_frame(
+            is_video=True,
+            current_frame=frame_index,
+            selected_frame=self.object_mask_frame,
+            fixed_for_video=self.object_fixed_video.get(),
         ):
             return self.object_mask
         return None
