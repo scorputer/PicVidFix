@@ -1,5 +1,20 @@
 # Change history
 
+## Desktop v1.7: select an object and correct only its pixels
+
+- Added **Select object...** in the main desktop toolbar, with a zoomable
+  image, rough rectangle seed, GrabCut automatic separation and manual
+  Keep/Remove mask brushes
+- Object-specific exposure, saturation, mask strength and feather controls
+  use the common image processing wrapper for preview and still/video exports
+- Preview-only object outlines do not alter saved pixels
+- Stationary video masks are applied across the clip only after explicit
+  opt-in and confirmation; no moving-object tracking is claimed
+- Resets, media changes, and presets handle object masks separately from
+  reusable correction parameters
+- Added deterministic automated tests covering segmentation, boundaries,
+  mask compositing, alpha, large source coordinates and preview/save parity
+
 ## Desktop v1.6: frame-aware comparisons and virtual ring lighting
 
 - Side-by-side source/target previews in the multi-reference comparison panel,
@@ -51,6 +66,7 @@ The original project is based on `HueSatVal3.py` (preserved in `baseline/`). Ver
 | v1.5.1 | Main-preview X/Y cursor display, zoomable/pannable ROI inspector popup, non-destructive box overlays and JSON export | Current modular desktop GUI + region_inspector.py; standalone remains v1.5 |
 | v1.5.2 | Multi-reference overlap/EV analysis for still images and video frames; optional global suggestion, regional diagnostic heatmap and tests | Current modular desktop GUI + reference_match.py + reference_dialog.py; standalone remains v1.5 |
 | v1.6 | Independent video source/reference frame scrubbing, visible frame numbering, preview panes and signed radial light-ring correction | Modular desktop source; standalone remains v1.5 |
+| v1.7 | Object selection with GrabCut, editable mask brushes and per-object corrections, plus explicit fixed-video opt-in | Modular desktop GUI + object_mask.py + object_dialog.py; standalone remains v1.5 |
 
 Historical GUIs are reference snapshots and are **not guaranteed to work** with the current root pipeline. To reproduce a specific historical version, use that version's original ZIP or match it with its contemporaneous dependencies. Video samples, complete original test suite, and original packaged releases have not yet been imported.
 
