@@ -8,7 +8,7 @@ original Python `HueSatVal3.py` engine.
 | Edition | Status | How to run |
 | --- | --- | --- |
 | **Web v0.3.2** | Browser-based photo editor with zoom/pan and analysis ROIs (no server uploads) | Open `web/` through a static HTTP server, or deploy it to Cloudflare Pages |
-| **Desktop v1.6** | Python image/video editor with dynamic subject-region exposure and region inspector | `py video_color_gui.py` |
+| **Desktop v1.7** | Python image/video editor with dynamic subject-region exposure and region inspector | `py video_color_gui.py` |
 | **Standalone v1.5** | Same desktop app in a single Python file | `py HueSatVal_v1_5_standalone.py` |
 
 ## Web quick start
@@ -49,6 +49,40 @@ py video_color_gui.py
 ```
 
 MP4 export requires a separate FFmpeg installation with `ffmpeg.exe` on PATH.
+
+### Object-specific corrections (desktop v1.7)
+
+Select **Select object...** in the main toolbar, or **Select / refine
+object...** in the scrolling right-hand panel. In the object selection window:
+
+1. Draw a rough rectangle around the subject, leaving some surrounding
+   background. Click **Find object** to use OpenCV GrabCut segmentation.
+2. Inspect the cyan/teal highlighted mask. Select **Keep brush** or
+   **Remove brush** and paint over errors. The mouse wheel zooms; hold
+   **Space and drag** to pan.
+3. Click **Use selection**. Adjust **Object exposure**, **Object saturation**,
+   **Mask strength** and **Edge feather** in the main right-hand panel.
+
+The object mask is **non-destructive**. The selected boundary is drawn on
+both main previews as a guide but is not embedded into the saved file. Still
+image exports use the same masked full-resolution correction as previews.
+GrabCut and brush work on a <=1200-pixel-wide analysis copy and the mask
+is resampled with feathering during full-resolution processing. This keeps
+large images responsive but means extremely fine object edges are approximate.
+
+**Video:** A newly selected object is initially corrected only on the
+frame where it was selected. To apply the same mask to every frame, check
+**Use FIXED mask across video (no motion tracking)**; video export asks
+for explicit confirmation. A fixed-position mask is useful for a stationary
+camera/subject but will NOT follow a person or object as it moves. If
+fixed-mask mode is off, the export can proceed only after acknowledging
+that object correction will be excluded. Automatic object tracking is a
+future development step.
+
+Object correction sliders are saved in presets, but the source-specific
+pixel mask is NOT embedded in the JSON preset. Draw a new object mask when
+changing photos or videos. The older standalone v1.5 and web editor do
+not yet include this object-selection workflow.
 
 The desktop **Color references...** panel now shows source and selected
 reference side by side. When either pane displays video, it has a frame slider,
@@ -97,6 +131,9 @@ are outside its current scope.
 - `reference_dialog.py`: Desktop panel to collect photos/frames and review regional suggestions
 - `reference_preview.py`: Side-by-side image/video previews with frame navigation
 - `light_ring.py`: Radial exposure field and optional center/edge metering
+- `object_mask.py`: GrabCut segmentation, manual brush editing and local pixel correction
+- `object_dialog.py`: Zoomable object picker and foreground/background mask refinement
+- `tests/test_object_mask.py`: Object-selection, static-video and correction-parity regressions
 - `HueSatVal_v1_5_standalone.py`: Historical all-in-one v1.5 desktop version
   (does **not** yet include the new region inspector)
 - `baseline/`: Original unmodified `HueSatVal3.py`
