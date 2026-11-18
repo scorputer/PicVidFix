@@ -27,6 +27,7 @@ import cv2
 from PIL import Image, ImageTk
 
 from region_inspector import RegionInspector
+from light_ring import estimate_ring_ev
 from reference_dialog import ReferenceMatchDialog
 from reference_match import ReferenceReport
 from color_pipeline import (
@@ -42,6 +43,14 @@ from color_pipeline import (
 
 
 # Name, minimum, maximum, neutral/default value, slider precision.
+RING_SPECS = (
+    ("ring_ev", "Center correction (EV)", -3.0, 3.0, 0.0),
+    ("ring_center_x", "Horizontal position", 0.0, 1.0, 0.5),
+    ("ring_center_y", "Vertical position", 0.0, 1.0, 0.5),
+    ("ring_radius", "Ring radius", 0.05, 2.0, 0.65),
+    ("ring_feather", "Edge feathering", 0.0, 1.0, 0.75),
+)
+
 CONTROL_SPECS = (
     ("brightness", -255.0, 255.0, 0.0, 0.1),
     ("contrast", 0.0, 3.0, 1.0, 0.01),
@@ -434,7 +443,7 @@ class VideoColorApp:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("PicVidFix Video & Image Lab v1.5.2")
+        self.root.title("PicVidFix Video & Image Lab v1.6")
         self.root.geometry("1490x900")
         self.root.minsize(1160, 680)
 
@@ -482,6 +491,7 @@ class VideoColorApp:
         self.status = tk.StringVar(value="Open a video or image to begin.")
         self.timeline_text = tk.StringVar(value="00:00 / 00:00")
         self.timeline_var = tk.DoubleVar(value=0)
+        self.frame_indicator = tk.StringVar(value="No frame")
         self.preview_hint = tk.StringVar(
             value="Open a video or image. Video preview playback is silent; exports keep original audio."
         )
@@ -500,6 +510,18 @@ class VideoColorApp:
             "smoothing_seconds": tk.StringVar(value="0.65"),
         }
         self.auto_info = tk.StringVar(value="Off. Background does not affect metering.")
+        self.ring_enabled = tk.BooleanVar(value=False)
+        self.ring_values = {
+            name: tk.DoubleVar(value=default)
+            for name, _, _, _, default in RING_SPECS
+        }
+        self.ring_numeric = {
+            name: tk.StringVar(value=f"{default:g}")
+            for name, _, _, _, default in RING_SPECS
+        }
+        self.ring_info = tk.StringVar(
+            value="Off. Add fill light or reduce a central hotspot."
+        )
         self.auto_levels: list[float] | None = None
         self.auto_levels_key = None
         self.auto_curve: list[float] | None = None
@@ -602,6 +624,9 @@ class VideoColorApp:
             side="right"
         )
         ttk.Label(
+            player, textvariable=self.frame_indicator, width=28
+        ).pack(side="right", padx=(0, 6))
+        ttk.Label(
             player, textvariable=self.pixel_position, width=24
         ).pack(side="right", padx=(0, 8))
         self.timeline = ttk.Scale(
@@ -684,6 +709,43 @@ class VideoColorApp:
             control_host, textvariable=self.auto_info,
             foreground="#666666", wraplength=330,
         ).pack(fill="x", pady=(5, 5))
+        ttk.Separator(control_host).pack(fill="x", pady=(5, 10))
+        ttk.Label(
+            control_host, text="Virtual ring light / anti-hotspot",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w", pady=(0, 5))
+        ttk.Checkbutton(
+            control_host, text="Enable ring lighting correction",
+            variable=self.ring_enabled, command=self._ring_changed,
+        ).pack(anchor="w", pady=(0, 4))
+        for name, label, low, high, default in RING_SPECS:
+            row = ttk.Frame(control_host)
+            row.pack(fill="x", pady=1)
+            ttk.Label(row, text=label).pack(anchor="w")
+            editor = ttk.Frame(row)
+            editor.pack(fill="x")
+            ttk.Scale(
+                editor, from_=low, to=high, variable=self.ring_values[name],
+                command=lambda _value, key=name: self._ring_slider_changed(key),
+            ).pack(side="left", fill="x", expand=True)
+            field = ttk.Entry(
+                editor, textvariable=self.ring_numeric[name], width=8
+            )
+            field.pack(side="right", padx=(5, 0))
+            field.bind(
+                "<Return>", lambda _event, key=name: self._ring_number_changed(key)
+            )
+            field.bind(
+                "<FocusOut>", lambda _event, key=name: self._ring_number_changed(key)
+            )
+        ttk.Button(
+            control_host, text="Estimate center-to-edge lighting",
+            command=self._estimate_ring,
+        ).pack(fill="x", pady=(5, 3))
+        ttk.Label(
+            control_host, textvariable=self.ring_info,
+            foreground="#666666", wraplength=330,
+        ).pack(fill="x", pady=(0, 6))
         ttk.Separator(control_host).pack(fill="x", pady=(5, 10))
         ttk.Label(
             control_host, text="Reference-guided color matching",
@@ -929,6 +991,11 @@ class VideoColorApp:
             self.auto_analyzing = False
             self.auto_pending_key = None
             self.auto_info.set("Off. Manual exposure only.")
+        self.ring_enabled.set(False)
+        for name, _, _, _, default in RING_SPECS:
+            self.ring_values[name].set(default)
+            self.ring_numeric[name].set(f"{default:g}")
+        self.ring_info.set("Off. Add fill light or reduce a central hotspot.")
         self._schedule_preview()
 
     def _begin_auto_analysis(self) -> None:
@@ -1020,6 +1087,10 @@ class VideoColorApp:
         )
         popup = tk.Toplevel(self.root)
         popup.title("Select the subject to meter")
+        if self.media_kind == "video":
+            ttk.Label(
+                popup, text=f"Source video frame {self.current_frame} (0-based)"
+            ).pack(padx=10)
         ttk.Label(
             popup,
             text="Drag over the subject. Background outside this area is ignored "
@@ -1089,6 +1160,12 @@ class VideoColorApp:
         if remap:
             hex_to_bgr(remap)
         return ColorSettings(
+            ring_enabled=self.ring_enabled.get(),
+            ring_ev=self.ring_values["ring_ev"].get(),
+            ring_center_x=self.ring_values["ring_center_x"].get(),
+            ring_center_y=self.ring_values["ring_center_y"].get(),
+            ring_radius=self.ring_values["ring_radius"].get(),
+            ring_feather=self.ring_values["ring_feather"].get(),
             offset=(
                 self.values["blue_gain"].get(),
                 self.values["green_gain"].get(),
@@ -1109,6 +1186,8 @@ class VideoColorApp:
         self.media_kind = kind
         self.source_frame = frame
         self.region_box = None
+        if kind == "image":
+            self.frame_indicator.set("Still image")
         self.current_frame = 0
         if kind == "image":
             if self.capture is not None:
@@ -1218,6 +1297,7 @@ class VideoColorApp:
     def _update_time(self) -> None:
         if self.media_kind != "video":
             self.timeline_text.set("Image mode")
+            self.frame_indicator.set("Still image")
             return
         current = self.current_frame / self.fps
         total = self.frame_count / self.fps if self.frame_count else current
@@ -1226,6 +1306,10 @@ class VideoColorApp:
             return f"{int(seconds // 60):02d}:{int(seconds % 60):02d}"
 
         self.timeline_text.set(f"{fmt(current)} / {fmt(total)}")
+        self.frame_indicator.set(
+            f"Frame {self.current_frame} / {max(0, self.frame_count - 1)} "
+            "(0-based)"
+        )
 
     def _schedule_preview(self) -> None:
         """Queue the latest accurate frame without blocking the Tk UI."""
@@ -1279,11 +1363,75 @@ class VideoColorApp:
             )
         self._schedule_preview()
 
+    def _ring_slider_changed(self, name: str) -> None:
+        """Keep precise text in sync without interrupting slider dragging."""
+        value = self.ring_values[name].get()
+        self.ring_numeric[name].set(f"{value:.3f}")
+        if self.ring_enabled.get():
+            self._schedule_preview()
+
+    def _ring_number_changed(self, name: str) -> None:
+        """Commit a valid ring coordinate or EV from its editable field."""
+        spec = next(
+            (spec for spec in RING_SPECS if spec[0] == name), None
+        )
+        if spec is None:
+            return
+        _, _, minimum, maximum, _ = spec
+        try:
+            value = float(self.ring_numeric[name].get())
+            if not math.isfinite(value) or not minimum <= value <= maximum:
+                raise ValueError("Ring control is out of range.")
+        except ValueError:
+            self.ring_numeric[name].set(f"{self.ring_values[name].get():.3f}")
+            self.status.set(f"Invalid ring control: {name}")
+            return
+        self.ring_values[name].set(value)
+        self.ring_numeric[name].set(f"{value:g}")
+        self._ring_changed()
+
+    def _ring_changed(self) -> None:
+        self.ring_info.set(
+            f"{'On' if self.ring_enabled.get() else 'Off'} | "
+            f"{self.ring_values['ring_ev'].get():+.2f} EV at ring center. "
+            "Positive fills shadows; negative softens a hotspot."
+        )
+        self._schedule_preview()
+
+    def _estimate_ring(self) -> None:
+        """Meter center against an outer annulus, then allow manual tuning."""
+        if self.source_frame is None:
+            messagebox.showinfo("Ring lighting", "Open a photo or video first.")
+            return
+        try:
+            ev, center, edge = estimate_ring_ev(
+                self.source_frame,
+                center_x=self.ring_values["ring_center_x"].get(),
+                center_y=self.ring_values["ring_center_y"].get(),
+                radius=self.ring_values["ring_radius"].get(),
+            )
+        except ValueError as error:
+            messagebox.showerror("Ring metering", str(error))
+            return
+        self.ring_values["ring_ev"].set(ev)
+        self.ring_numeric["ring_ev"].set(f"{ev:.3f}")
+        self.ring_enabled.set(True)
+        self.ring_info.set(
+            f"Meter: center {center:.0f}, surround {edge:.0f}; "
+            f"suggested {ev:+.2f} EV. Heuristic: check subjects and highlights."
+        )
+        self._schedule_preview()
+
     def _reference_source_frame(self):
         """Provide a stable snapshot of the currently selected frame."""
         if self.source_frame is None:
             return None
         return self.source_frame.copy()
+
+    def _reference_video_info(self) -> tuple[str, int, int] | None:
+        if self.media_kind != "video" or self.source_path is None:
+            return None
+        return str(self.source_path), self.current_frame, self.frame_count
 
     def _reference_source_label(self) -> str:
         filename = (
@@ -1332,6 +1480,7 @@ class VideoColorApp:
             source_provider=self._reference_source_frame,
             source_label=self._reference_source_label,
             apply_callback=self._apply_reference_suggestion,
+            source_video_info=self._reference_video_info,
         )
 
     def _inspect_region(self) -> None:
@@ -1490,6 +1639,10 @@ class VideoColorApp:
         )
         popup = tk.Toplevel(self.root)
         popup.title("Drag over a neutral reference area")
+        if self.media_kind == "video":
+            ttk.Label(
+                popup, text=f"Source video frame {self.current_frame} (0-based)"
+            ).pack(padx=10)
         ttk.Label(
             popup,
             text="Drag a rectangle over a neutral-colored patch; "
@@ -1662,6 +1815,14 @@ class VideoColorApp:
             self.remap_enabled.set(bool(settings.remap_blue))
             self.remap_hex.set(settings.remap_blue or payload.get("remap_hex", "FF8800"))
             self.calibration_hex.set(payload.get("calibration_hex", "FFFFFF"))
+            self.ring_enabled.set(settings.ring_enabled)
+            for name, _, low, high, _ in RING_SPECS:
+                value = float(getattr(settings, name))
+                if not math.isfinite(value) or not low <= value <= high:
+                    raise ValueError(f"Invalid saved ring parameter: {name}")
+                self.ring_values[name].set(value)
+                self.ring_numeric[name].set(f"{value:g}")
+            self._ring_changed()
             auto = AutoExposureSettings(**payload.get("auto_exposure", {}))
             self.auto_enabled.set(auto.enabled)
             self.auto_roi = tuple(auto.roi)
