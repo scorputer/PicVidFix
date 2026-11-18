@@ -1477,6 +1477,141 @@ class VideoColorApp:
             )
         self._schedule_preview()
 
+    def _object_settings(self) -> ObjectCorrectionSettings:
+        """Capture validated, non-destructive, object-local color controls."""
+        values = {}
+        for name, _, minimum, maximum, _ in OBJECT_SPECS:
+            value = self.object_values[name].get()
+            if not math.isfinite(value) or not minimum <= value <= maximum:
+                raise ValueError(f"Object correction out of range: {name}")
+            values[name] = value
+        return ObjectCorrectionSettings(
+            enabled=self.object_enabled.get(),
+            **values,
+        )
+
+    def _object_slider_changed(self, name: str) -> None:
+        """Show exact current slider values and refresh only selected pixels."""
+        value = self.object_values[name].get()
+        self.object_numeric[name].set(f"{value:.3f}")
+        if self.object_mask is not None:
+            self._schedule_preview()
+
+    def _object_number_changed(self, name: str) -> None:
+        """Commit numeric correction values; reject invalid or partial text."""
+        spec = next((item for item in OBJECT_SPECS if item[0] == name), None)
+        if spec is None:
+            return
+        _, _, minimum, maximum, _ = spec
+        try:
+            value = float(self.object_numeric[name].get())
+            if not math.isfinite(value) or not minimum <= value <= maximum:
+                raise ValueError("Object correction is out of range.")
+        except ValueError:
+            self.object_numeric[name].set(
+                f"{self.object_values[name].get():.3f}"
+            )
+            self.status.set(f"Invalid object control: {name}")
+            return
+        self.object_values[name].set(value)
+        self.object_numeric[name].set(f"{value:g}")
+        self._object_changed()
+
+    def _object_changed(self) -> None:
+        """Show whether the object mask is static or limited to one frame."""
+        if self.object_mask is None:
+            self.object_info.set(
+                "No object selected. Choose Select object and draw a box."
+            )
+        elif self.media_kind == "video":
+            if self.object_fixed_video.get():
+                self.object_info.set(
+                    "FIXED mask over every video frame. "
+                    "This does NOT track a moving object."
+                )
+            else:
+                self.object_info.set(
+                    f"Object selected on frame {self.object_mask_frame}. "
+                    "Preview-only on that frame. Video export excludes "
+                    "the object unless fixed-mask mode is selected."
+                )
+        else:
+            self.object_info.set(
+                "Object mask ready. Exposure and saturation affect "
+                "only the highlighted subject."
+            )
+        self._schedule_preview()
+
+    def _clear_object(self) -> None:
+        """Remove object annotation without altering other image settings."""
+        self.object_mask = None
+        self.object_mask_frame = None
+        self.object_enabled.set(False)
+        self.object_fixed_video.set(False)
+        self._object_changed()
+
+    def _accept_object(self, mask: np.ndarray) -> None:
+        """Receive a copy of the refined object mask from the selection tool."""
+        if self.source_frame is None or mask.dtype != np.uint8:
+            return
+        if mask.ndim != 2 or not np.any(mask):
+            messagebox.showerror(
+                "Object selection", "The selected object is empty."
+            )
+            return
+        self.object_mask = mask.copy()
+        self.object_mask_frame = (
+            self.current_frame if self.media_kind == "video" else None
+        )
+        self.object_enabled.set(True)
+        self.object_fixed_video.set(False)
+        self._object_changed()
+        self.status.set(
+            "Selected object mask. Adjust Object exposure/saturation, "
+            "then inspect the corrected preview."
+        )
+
+    def _object_mask_for_frame(self, frame_index: int) -> np.ndarray | None:
+        """Never accidentally apply a stationary mask to moving video."""
+        if not self.object_enabled.get() or self.object_mask is None:
+            return None
+        if self.media_kind != "video":
+            return self.object_mask
+        if (
+            self.object_fixed_video.get()
+            or frame_index == self.object_mask_frame
+        ):
+            return self.object_mask
+        return None
+
+    def _select_object(self) -> None:
+        """Open the zoomable, GrabCut-based object segmentation inspector."""
+        if self.source_frame is None:
+            messagebox.showinfo(
+                "Select object", "Open an image or video frame first."
+            )
+            return
+        self._pause()
+        if (
+            self.object_dialog is not None
+            and self.object_dialog.window.winfo_exists()
+        ):
+            self.object_dialog.window.lift()
+            self.object_dialog.window.focus_set()
+            return
+        caption = (
+            f"Frame {self.current_frame} (0-based)"
+            if self.media_kind == "video" else "Still image"
+        )
+        existing_mask = self._object_mask_for_frame(self.current_frame)
+        self.object_dialog = ObjectSelectionDialog(
+            self.root,
+            self.source_frame,
+            on_accept=self._accept_object,
+            existing_mask=existing_mask,
+            frame_label=caption,
+        )
+
     def _ring_slider_changed(self, name: str) -> None:
         """Keep precise text in sync without interrupting slider dragging."""
         value = self.ring_values[name].get()
